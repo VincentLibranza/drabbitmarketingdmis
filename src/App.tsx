@@ -21,9 +21,7 @@ import {
   FolderLock,
   ChevronRight,
   Menu,
-  X,
-  Upload,
-  Download
+  X
 } from "lucide-react";
 
 import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
@@ -61,8 +59,6 @@ export default function App() {
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [dbConfigError, setDbConfigError] = useState<string | null>(null);
   const [dbConfigSuccess, setDbConfigSuccess] = useState<string | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // Function to pull latest state from LocalDB
   const refreshData = () => {
@@ -171,49 +167,6 @@ export default function App() {
     }
     setCurrentUser(null);
     localStorage.removeItem("dmis_logged_in_user");
-  };
-
-  const handlePushLocalToCloud = async () => {
-    setIsSyncing(true);
-    setSyncMessage("Pushing local data to Turso cloud...");
-    try {
-      await LocalDB.pushAllLocalToCloud();
-      setSyncMessage("✨ Successfully uploaded local data to Turso Cloud!");
-      if (currentUser) {
-        LocalDB.appendLog(currentUser.username, "Pushed local data snapshot manually to Turso Cloud.", "SYSTEM");
-      }
-      refreshData();
-      setTimeout(() => setSyncMessage(null), 4000);
-    } catch (err: any) {
-      setSyncMessage(`❌ Push failed: ${err.message || "Unknown error"}`);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
-  const handlePullCloudToLocal = async () => {
-    if (!confirm("This will overwrite this browser's local state with data from your Turso Cloud database. Proceed?")) {
-      return;
-    }
-    setIsSyncing(true);
-    setSyncMessage("Pulling fresh data from Turso cloud...");
-    try {
-      const success = await LocalDB.pullFromDB();
-      if (success) {
-        setSyncMessage("✨ Successfully downloaded data from Turso Cloud!");
-        if (currentUser) {
-          LocalDB.appendLog(currentUser.username, "Pulled cloud data snapshot manually to browser.", "SYSTEM");
-        }
-        refreshData();
-      } else {
-        setSyncMessage("❌ Pull failed: Cloud returned unsuccessful response");
-      }
-      setTimeout(() => setSyncMessage(null), 4000);
-    } catch (err: any) {
-      setSyncMessage(`❌ Pull failed: ${err.message || "Unknown error"}`);
-    } finally {
-      setIsSyncing(false);
-    }
   };
 
   const handleConnectCloudDb = async (e: React.FormEvent) => {
@@ -456,40 +409,6 @@ export default function App() {
                 )}
               </div>
             </form>
-
-            {dbInfo.isRemote && (
-              <div className="space-y-1.5 pt-2.5 border-t border-slate-100 mt-2">
-                <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Data Synchronization</span>
-                <p className="text-[10px] text-slate-400 font-sans leading-tight">
-                  Manually upload your browser data or download the latest cloud records.
-                </p>
-                <div className="grid grid-cols-2 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handlePushLocalToCloud}
-                    disabled={isSyncing}
-                    className="flex items-center justify-center gap-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[10px] py-1.5 px-2 rounded-lg text-center transition cursor-pointer disabled:opacity-50 font-sans"
-                    title="Upload local browser data to your Turso Cloud database"
-                  >
-                    <Upload className="w-3 h-3" /> Push to Cloud
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePullCloudToLocal}
-                    disabled={isSyncing}
-                    className="flex items-center justify-center gap-1 bg-teal-50 hover:bg-teal-100 text-teal-700 font-bold text-[10px] py-1.5 px-2 rounded-lg text-center transition cursor-pointer disabled:opacity-50 font-sans"
-                    title="Download database state from Turso Cloud to this browser"
-                  >
-                    <Download className="w-3 h-3" /> Pull from Cloud
-                  </button>
-                </div>
-                {syncMessage && (
-                  <div className="text-[10px] text-indigo-600 font-sans text-center leading-tight bg-slate-50 p-1 rounded border border-slate-100 mt-1">
-                    {syncMessage}
-                  </div>
-                )}
-              </div>
-            )}
 
             {!dbInfo.isRemote && (
               <div className="bg-red-50/75 border border-red-200/70 p-2.5 rounded-xl text-[10px] text-red-800 space-y-1 leading-normal">

@@ -316,7 +316,23 @@ export class LocalDB {
         body: JSON.stringify({ databaseUrl, authToken }),
       });
 
-      const json = await res.json();
+      const contentType = res.headers.get("content-type");
+      let json: any = {};
+      if (contentType && contentType.includes("application/json")) {
+        try {
+          json = await res.json();
+        } catch {
+          // ignore internal syntax errors
+        }
+      } else {
+        const textResponse = await res.text();
+        console.error("Non-JSON Response from database configuration route:", textResponse);
+        return { 
+          success: false, 
+          error: "Database configuration endpoint returned an invalid response. Please verify that your Turso URL and token are correct."
+        };
+      }
+
       if (res.ok && json.success) {
         localStorage.setItem("dmis_db_connection_type", json.connectionType);
         localStorage.setItem("dmis_db_url", json.databaseUrl);
@@ -332,7 +348,7 @@ export class LocalDB {
         return { success: false, error: json.error || "Failed to configure cloud database." };
       }
     } catch (err: any) {
-      return { success: false, error: err.message || "Network error." };
+      return { success: false, error: err.message || "Network error. Please check your connection." };
     }
   }
 
@@ -364,6 +380,11 @@ export class LocalDB {
     try {
       const res = await fetch("/api/db/pull");
       if (!res.ok) return false;
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error("Non-JSON Response received while pulling from cloud database.");
+        return false;
+      }
       const json = await res.json();
       if (json.success && json.data) {
         if (json.connectionType) localStorage.setItem("dmis_db_connection_type", json.connectionType);
