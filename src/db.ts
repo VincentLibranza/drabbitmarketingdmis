@@ -282,12 +282,24 @@ export class LocalDB {
     });
   }
 
+  static getDBInfo() {
+    return {
+      connectionType: localStorage.getItem("dmis_db_connection_type") || "Local SQLite Fallback File",
+      databaseUrl: localStorage.getItem("dmis_db_url") || "file:local.db",
+      isRemote: localStorage.getItem("dmis_db_is_remote") === "true",
+    };
+  }
+
   static async pullFromDB(): Promise<boolean> {
     try {
       const res = await fetch("/api/db/pull");
       if (!res.ok) return false;
       const json = await res.json();
       if (json.success && json.data) {
+        if (json.connectionType) localStorage.setItem("dmis_db_connection_type", json.connectionType);
+        if (json.databaseUrl) localStorage.setItem("dmis_db_url", json.databaseUrl);
+        localStorage.setItem("dmis_db_is_remote", String(!!json.isRemote));
+
         const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
         if (users) this.set("users", users);
         if (products) this.set("products", products);

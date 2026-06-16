@@ -53,6 +53,7 @@ export default function App() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [dbInfo, setDbInfo] = useState(() => LocalDB.getDBInfo());
 
   // Function to pull latest state from LocalDB
   const refreshData = () => {
@@ -63,6 +64,7 @@ export default function App() {
     setDeliveries(LocalDB.getDeliveries());
     setComplaints(LocalDB.getComplaints());
     setAuditLogs(LocalDB.getAuditLogs());
+    setDbInfo(LocalDB.getDBInfo());
   };
 
   // Sync state on boot
@@ -223,6 +225,41 @@ export default function App() {
                 </button>
               );
             })}
+          </div>
+
+          {/* Database Connection Status Diagnostic Panel */}
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-950 block text-[11px] uppercase tracking-wider text-slate-400">Database Status</span>
+              <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                dbInfo.isRemote ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${dbInfo.isRemote ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                {dbInfo.isRemote ? "Remote Sync" : "Local Fallback"}
+              </span>
+            </div>
+            
+            <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-mono text-[10px]">
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-sans">Type:</span>
+                <span className="font-semibold text-slate-700">{dbInfo.connectionType}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-slate-400 font-sans">Connection URL:</span>
+                <span className="font-semibold text-indigo-600 truncate block font-mono" title={dbInfo.databaseUrl}>
+                  {dbInfo.databaseUrl}
+                </span>
+              </div>
+            </div>
+
+            {!dbInfo.isRemote && (
+              <div className="bg-amber-50/75 border border-amber-200/70 p-2.5 rounded-xl text-[11px] text-amber-800 space-y-1 leading-normal">
+                <span className="font-bold block">⚠️ Why is there no movement?</span>
+                <span>
+                  The app is saving to its temporary local database (local.db). Set <strong>TURSO_DATABASE_URL</strong> & <strong>TURSO_AUTH_TOKEN</strong> env vars on Vercel or in AI Studio to connect your Turso Cloud directly!
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Quick instructions and Reset DB features */}
