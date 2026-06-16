@@ -301,7 +301,7 @@ app.use(async (req, res, next) => {
 
 // Diagnostic endpoint to check Turso cloud connection status
 app.get(["/api/db/status", "/db/status"], (req, res) => {
-  let maskedUrl = "file:local.db";
+  let maskedUrl = "Unconfigured (Pending Connection)";
   let isRemote = false;
   
   if (dbUrl && dbUrl !== "file:local.db") {
@@ -316,7 +316,7 @@ app.get(["/api/db/status", "/db/status"], (req, res) => {
   }
   
   res.json({
-    connectionType: isRemote ? "Turso Cloud Database" : "Local SQLite Fallback File",
+    connectionType: "Turso Cloud Database",
     databaseUrl: maskedUrl,
     isRemote,
   });
@@ -407,25 +407,25 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     const complaints = complaintsRes.rows;
     const auditLogs = auditLogsRes.rows;
 
-    let maskedUrl = "file:local.db";
+    let maskedUrl = "Unconfigured (Pending Connection)";
     let isRemote = false;
     
     if (dbUrl && dbUrl !== "file:local.db") {
-      isRemote = true;
-      if (dbUrl.startsWith("libsql://")) {
-        const parts = dbUrl.replace("libsql://", "").split(".");
-        const firstPart = parts[0] ? (parts[0].length > 6 ? parts[0].substring(0, 3) + "***" + parts[0].slice(-3) : "***") : "***";
-        maskedUrl = `libsql://${firstPart}.${parts.slice(1).join(".")}`;
-      } else {
-        maskedUrl = dbUrl.substring(0, 10) + "..." + dbUrl.slice(-5);
-      }
-    }
-
-    res.json({
-      success: true,
-      connectionType: isRemote ? "Turso Cloud Database" : "Local SQLite Fallback File",
-      databaseUrl: maskedUrl,
-      isRemote,
+       isRemote = true;
+       if (dbUrl.startsWith("libsql://")) {
+         const parts = dbUrl.replace("libsql://", "").split(".");
+         const firstPart = parts[0] ? (parts[0].length > 6 ? parts[0].substring(0, 3) + "***" + parts[0].slice(-3) : "***") : "***";
+         maskedUrl = `libsql://${firstPart}.${parts.slice(1).join(".")}`;
+       } else {
+         maskedUrl = dbUrl.substring(0, 10) + "..." + dbUrl.slice(-5);
+       }
+     }
+ 
+     res.json({
+       success: true,
+       connectionType: "Turso Cloud Database",
+       databaseUrl: maskedUrl,
+       isRemote,
       data: {
         users,
         products,

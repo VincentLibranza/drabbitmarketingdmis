@@ -295,11 +295,13 @@ export class LocalDB {
   }
 
   static getDBInfo() {
+    const isRemote = localStorage.getItem("dmis_db_is_remote") === "true";
+    const savedUrl = localStorage.getItem("dmis_db_saved_url") || "";
     return {
-      connectionType: localStorage.getItem("dmis_db_connection_type") || "Local SQLite Fallback File",
-      databaseUrl: localStorage.getItem("dmis_db_url") || "file:local.db",
-      isRemote: localStorage.getItem("dmis_db_is_remote") === "true",
-      savedUrl: localStorage.getItem("dmis_db_saved_url") || "",
+      connectionType: "Turso Cloud Database",
+      databaseUrl: isRemote ? (localStorage.getItem("dmis_db_url") || savedUrl) : "Unconfigured (Pending Connection)",
+      isRemote: isRemote,
+      savedUrl: savedUrl,
       savedToken: localStorage.getItem("dmis_db_saved_token") || "",
     };
   }

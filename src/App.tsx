@@ -1,4 +1,4 @@
-/** //vincent
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -161,7 +161,7 @@ export default function App() {
   };
 
   const handleDisconnectCloudDb = async () => {
-    if (confirm("Disconnect from cloud Turso DB and revert back to your local SQLite fallback?")) {
+    if (confirm("Reset current Turso cloud database connection details? This will clear the configuration.")) {
       await LocalDB.disconnectCloudDB();
     }
   };
@@ -285,12 +285,12 @@ export default function App() {
           {/* Database Connection Status Diagnostic Panel */}
           <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-950 block text-[11px] uppercase tracking-wider text-slate-400 font-mono">Database Status</span>
+              <span className="font-bold text-slate-950 block text-[11px] uppercase tracking-wider text-slate-400 font-mono">Turso Database</span>
               <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                dbInfo.isRemote ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                dbInfo.isRemote ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
               }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${dbInfo.isRemote ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-                {dbInfo.isRemote ? "Turso Cloud" : "Local Fallback"}
+                <span className={`w-1.5 h-1.5 rounded-full ${dbInfo.isRemote ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
+                {dbInfo.isRemote ? "Connected" : "Unconfigured"}
               </span>
             </div>
             
@@ -300,7 +300,7 @@ export default function App() {
                 <span className="font-semibold text-slate-700">{dbInfo.connectionType}</span>
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-slate-400 font-sans">Connection URL:</span>
+                <span className="text-slate-400 font-sans">Remote URL:</span>
                 <span className="font-semibold text-indigo-600 truncate block font-mono" title={dbInfo.databaseUrl}>
                   {dbInfo.databaseUrl}
                 </span>
@@ -369,10 +369,10 @@ export default function App() {
             </form>
 
             {!dbInfo.isRemote && (
-              <div className="bg-amber-50/75 border border-amber-200/70 p-2.5 rounded-xl text-[10px] text-amber-800 space-y-1 leading-normal">
-                <span className="font-bold block">💡 Fully Cloud Turso Sync:</span>
+              <div className="bg-red-50/75 border border-red-200/70 p-2.5 rounded-xl text-[10px] text-red-800 space-y-1 leading-normal">
+                <span className="font-bold block">💡 Connection Required:</span>
                 <span>
-                  Enter your Turso Cloud credentials above to connect your <strong>real cloud-hosted database</strong> dynamically. Added or removed items sync instantly so database updates are live!
+                  Please enter your Turso Cloud connection URL and authorization token below to configure and sync your live remote database.
                 </span>
               </div>
             )}
