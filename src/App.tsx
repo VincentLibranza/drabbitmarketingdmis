@@ -53,13 +53,6 @@ export default function App() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [dbInfo, setDbInfo] = useState(() => LocalDB.getDBInfo());
-  const [cloudUrlInput, setCloudUrlInput] = useState(dbInfo.savedUrl || "");
-  const [cloudTokenInput, setCloudTokenInput] = useState(dbInfo.savedToken || "");
-  const [isConfiguring, setIsConfiguring] = useState(false);
-  const [dbConfigError, setDbConfigError] = useState<string | null>(null);
-  const [dbConfigSuccess, setDbConfigSuccess] = useState<string | null>(null);
-
   // Function to pull latest state from LocalDB
   const refreshData = () => {
     setUsers(LocalDB.getUsers());
@@ -69,77 +62,12 @@ export default function App() {
     setDeliveries(LocalDB.getDeliveries());
     setComplaints(LocalDB.getComplaints());
     setAuditLogs(LocalDB.getAuditLogs());
-    
-    const info = LocalDB.getDBInfo();
-    setDbInfo(info);
-    if (info.savedUrl && info.savedUrl !== "Unconfigured (Pending Connection)") {
-      setCloudUrlInput(info.savedUrl);
-    }
-    if (info.savedToken) {
-      setCloudTokenInput(info.savedToken);
-    }
   };
 
   // Sync state on boot
   useEffect(() => {
     // Initial display of cached localized data
     refreshData();
-    
-    const initBoot = async () => {
-      let isCloudJustConnected = false;
-      try {
-        // Query the backend status to see if database environment variables are already active
-        const statusRes = await fetch("/api/db/status");
-        if (statusRes.ok) {
-          const statusJson = await statusRes.json();
-          if (statusJson.isRemote) {
-            const wasRemoteBefore = localStorage.getItem("dmis_db_is_remote") === "true";
-            localStorage.setItem("dmis_db_is_remote", "true");
-            localStorage.setItem("dmis_db_url", statusJson.databaseUrl);
-            localStorage.setItem("dmis_db_connection_type", statusJson.connectionType);
-            if (!localStorage.getItem("dmis_db_saved_url")) {
-              localStorage.setItem("dmis_db_saved_url", statusJson.databaseUrl);
-            }
-            if (!wasRemoteBefore) {
-              isCloudJustConnected = true;
-            }
-          } else {
-            // Restore dynamic cloud database reference on backend if saved
-            const savedUrl = localStorage.getItem("dmis_db_saved_url");
-            const savedToken = localStorage.getItem("dmis_db_saved_token");
-            if (savedUrl && savedUrl !== "Unconfigured (Pending Connection)") {
-              console.log("Restoring active cloud Turso DB on Express instance...");
-              await LocalDB.configureCloudDB(savedUrl, savedToken || undefined);
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed checking backend database connection status on boot:", err);
-      }
-
-      // Safe cloud database sync logic
-      try {
-        const isRemote = localStorage.getItem("dmis_db_is_remote") === "true";
-        if (isRemote) {
-          const hasInitSynced = localStorage.getItem("dmis_db_has_init_sync") === "true";
-          if (!hasInitSynced || isCloudJustConnected) {
-            console.log("Newly connected or un-migrated cloud Turso DB. Migrating current browser data as default seed snapshot...");
-            await LocalDB.pushAllLocalToCloud();
-            localStorage.setItem("dmis_db_has_init_sync", "true");
-          } else {
-            console.log("Pulling latest cloud database state...");
-            const success = await LocalDB.pullFromDB();
-            if (success) {
-              refreshData();
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed syncing cloud state on boot:", err);
-      }
-    };
-
-    initBoot();
     
     // Automatically retrieve previous session if active in localStorage
     const savedUser = localStorage.getItem("dmis_logged_in_user");
@@ -167,45 +95,6 @@ export default function App() {
     }
     setCurrentUser(null);
     localStorage.removeItem("dmis_logged_in_user");
-  };
-
-  const handleConnectCloudDb = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setDbConfigError(null);
-    setDbConfigSuccess(null);
-    setIsConfiguring(true);
-
-    if (!cloudUrlInput.trim()) {
-      setDbConfigError("Connection URL is required.");
-      setIsConfiguring(false);
-      return;
-    }
-
-    try {
-      const result = await LocalDB.configureCloudDB(cloudUrlInput.trim(), cloudTokenInput.trim() || undefined);
-      if (result.success) {
-        setDbConfigSuccess("Connected. Sycing existing records to cloud...");
-        await LocalDB.pushAllLocalToCloud();
-        setDbConfigSuccess("Successfully connected and synced to Turso cloud database!");
-        refreshData();
-        setTimeout(() => {
-          setDbConfigSuccess(null);
-          location.reload();
-        }, 1500);
-      } else {
-        setDbConfigError(result.error || "Failed to connect to cloud database.");
-      }
-    } catch (err: any) {
-      setDbConfigError(err.message || "An unexpected error occurred.");
-    } finally {
-      setIsConfiguring(false);
-    }
-  };
-
-  const handleDisconnectCloudDb = async () => {
-    if (confirm("Reset current Turso cloud database connection details? This will clear the configuration.")) {
-      await LocalDB.disconnectCloudDB();
-    }
   };
 
   // Resets local storage and restores all original seeds
@@ -324,116 +213,20 @@ export default function App() {
             })}
           </div>
 
-          {/* Database Connection Status Diagnostic Panel */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-950 block text-[11px] uppercase tracking-wider text-slate-400 font-mono">Turso Database</span>
-              <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                dbInfo.isRemote ? "bg-emerald-100 text-emerald-800" : "bg-red-100 text-red-800"
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${dbInfo.isRemote ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
-                {dbInfo.isRemote ? "Connected" : "Unconfigured"}
-              </span>
-            </div>
-            
-            <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-mono text-[10px]">
-              <div className="flex justify-between">
-                <span className="text-slate-400 font-sans">Type:</span>
-                <span className="font-semibold text-slate-700">{dbInfo.connectionType}</span>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-slate-400 font-sans">Remote URL:</span>
-                <span className="font-semibold text-indigo-600 truncate block font-mono" title={dbInfo.databaseUrl}>
-                  {dbInfo.databaseUrl}
-                </span>
-              </div>
-            </div>
-
-            {/* Cloud Connection Form */}
-            <form onSubmit={handleConnectCloudDb} className="space-y-2 pt-2 border-t border-slate-100">
-              <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Connect Turso Cloud</span>
-              
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 font-mono block font-bold">DATABASE CONNECTION URL</label>
-                <input
-                  type="text"
-                  value={cloudUrlInput}
-                  onChange={(e) => setCloudUrlInput(e.target.value)}
-                  placeholder="libsql://your-database.turso.io"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-indigo-500"
-                  disabled={isConfiguring}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9px] text-slate-400 font-mono block font-bold">AUTHORIZATION TOKEN</label>
-                <input
-                  type="password"
-                  value={cloudTokenInput}
-                  onChange={(e) => setCloudTokenInput(e.target.value)}
-                  placeholder="Enter Turso auth token"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-indigo-500"
-                  disabled={isConfiguring}
-                />
-              </div>
-
-              {dbConfigError && (
-                <div className="text-[10px] text-rose-600 font-sans leading-tight bg-rose-50 p-1.5 rounded border border-rose-100">
-                  ⚠️ {dbConfigError}
-                </div>
-              )}
-
-              {dbConfigSuccess && (
-                <div className="text-[10px] text-emerald-600 font-sans leading-tight bg-emerald-50 p-1.5 rounded border border-emerald-100">
-                  ✨ {dbConfigSuccess}
-                </div>
-              )}
-
-              <div className="flex gap-1.5 pt-1">
-                <button
-                  type="submit"
-                  disabled={isConfiguring}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] py-1 px-1.5 rounded-lg text-center transition cursor-pointer disabled:opacity-50"
-                >
-                  {isConfiguring ? "Connecting..." : dbInfo.isRemote ? "Update Cloud URL" : "Connect Turso Cloud"}
-                </button>
-                
-                {dbInfo.isRemote && (
-                  <button
-                    type="button"
-                    onClick={handleDisconnectCloudDb}
-                    className="bg-slate-100 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-100 text-slate-600 font-bold text-[10px] py-1 px-1.5 rounded-lg text-center transition cursor-pointer"
-                  >
-                    Disconnect
-                  </button>
-                )}
-              </div>
-            </form>
-
-            {!dbInfo.isRemote && (
-              <div className="bg-red-50/75 border border-red-200/70 p-2.5 rounded-xl text-[10px] text-red-800 space-y-1 leading-normal">
-                <span className="font-bold block">💡 Connection Required:</span>
-                <span>
-                  Please enter your Turso Cloud connection URL and authorization token below to configure and sync your live remote database.
-                </span>
-              </div>
-            )}
-          </div>
-
           {/* Quick instructions and Reset DB features */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-3">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
-              <Settings className="w-4 h-4 text-indigo-600 animate-spin-slow" />
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-2">
+            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs text-indigo-600">
+              <Settings className="w-4 h-4" />
               <span>SAD Development Control</span>
             </div>
             <p className="leading-relaxed text-slate-400">
-              This system implements a fully reactive offline database. Your modifications persist dynamically in browser local storage.
+              This system implements a fully reactive offline local database. Your modifications persist dynamically inside browser localStorage.
             </p>
             <button
               onClick={handleResetDatabase}
               className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
             >
-              Reset Database Coordinates
+              Restore Baseline Spec Seeds
             </button>
           </div>
         </aside>
