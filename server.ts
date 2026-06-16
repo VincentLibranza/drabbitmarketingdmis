@@ -8,16 +8,55 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Setup Turso Database client
-// Falls back to standard local file:local.db if no env is set
-export let dbUrl = process.env.TURSO_DATABASE_URL || "file:local.db";
-export let dbAuthToken = process.env.TURSO_AUTH_TOKEN || undefined;
+// Setup Turso Database client with lazy initialization & quote normalization
+let rawUrl = (process.env.TURSO_DATABASE_URL || "").trim();
+let rawToken = (process.env.TURSO_AUTH_TOKEN || "").trim();
 
-console.log(`Connecting to Turso Database via: ${dbUrl}`);
-export let db = createClient({
-  url: dbUrl,
-  authToken: dbAuthToken,
-});
+// Strip wrap-around quotes (single/double) if they are present in env variables
+if (rawUrl) {
+  if (rawUrl.startsWith('"') && rawUrl.endsWith('"')) {
+    rawUrl = rawUrl.slice(1, -1).trim();
+  } else if (rawUrl.startsWith("'") && rawUrl.endsWith("'")) {
+    rawUrl = rawUrl.slice(1, -1).trim();
+  }
+}
+if (rawToken) {
+  if (rawToken.startsWith('"') && rawToken.endsWith('"')) {
+    rawToken = rawToken.slice(1, -1).trim();
+  } else if (rawToken.startsWith("'") && rawToken.endsWith("'")) {
+    rawToken = rawToken.slice(1, -1).trim();
+  }
+}
+
+// Fallback to transient memory-mode is used to remove local file-based .db storage
+export let dbUrl = rawUrl || "file::memory:";
+export let dbAuthToken = rawToken || undefined;
+
+let dbClientInstance: any = null;
+
+function getDbClient() {
+  if (!dbClientInstance) {
+    if (!dbUrl) {
+      throw new Error("No database URL configured. Please set TURSO_DATABASE_URL environment variable.");
+    }
+    console.log(`Initializing LibSQL connection via: ${dbUrl}`);
+    dbClientInstance = createClient({
+      url: dbUrl,
+      authToken: dbAuthToken,
+    });
+  }
+  return dbClientInstance;
+}
+
+// Transparent lazy evaluation proxy matching the original SQL executive API
+export const db = {
+  execute(stmt: any) {
+    return getDbClient().execute(stmt);
+  },
+  batch(stmts: any[], mode?: any) {
+    return getDbClient().batch(stmts, mode);
+  }
+};
 
 // Configure base middleware
 app.use(express.json({ limit: "50mb" }));
@@ -304,7 +343,7 @@ app.get(["/api/db/status", "/db/status"], (req, res) => {
   let maskedUrl = "Unconfigured (Pending Connection)";
   let isRemote = false;
   
-  if (dbUrl && dbUrl !== "file:local.db") {
+  if (dbUrl && dbUrl !== "file::memory:" && dbUrl !== "file:local.db") {
     isRemote = true;
     if (dbUrl.startsWith("libsql://")) {
       const parts = dbUrl.replace("libsql://", "").split(".");
@@ -344,7 +383,7 @@ app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
     initPromise = null;
 
     // Apply the active references
-    db = client;
+    dbClientInstance = client;
     dbUrl = databaseUrl;
     dbAuthToken = authToken || undefined;
 
@@ -410,7 +449,7 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     let maskedUrl = "Unconfigured (Pending Connection)";
     let isRemote = false;
     
-    if (dbUrl && dbUrl !== "file:local.db") {
+    if (dbUrl && dbUrl !== "file::memory:" && dbUrl !== "file:local.db") {
        isRemote = true;
        if (dbUrl.startsWith("libsql://")) {
          const parts = dbUrl.replace("libsql://", "").split(".");

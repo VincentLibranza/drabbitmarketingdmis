@@ -343,14 +343,14 @@ export class LocalDB {
     localStorage.removeItem("dmis_db_saved_url");
     localStorage.removeItem("dmis_db_saved_token");
     
-    // Reset backend DB connection to the standard local file
+    // Reset backend DB connection to clean transient in-memory database
     try {
       await fetch("/api/db/configure", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ databaseUrl: "file:local.db" }),
+        body: JSON.stringify({ databaseUrl: "file::memory:" }),
       });
     } catch {
       // ignore fallback error
