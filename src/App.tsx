@@ -67,7 +67,19 @@ export default function App() {
 
   // Sync state on boot
   useEffect(() => {
+    // Initial display of cached localized data
     refreshData();
+    
+    // Asynchronously update with live, fresh state from remote Turso cloud DB
+    LocalDB.pullFromDB()
+      .then((success) => {
+        if (success) {
+          refreshData();
+        }
+      })
+      .catch((err) => {
+        console.error("Failed syncing setup with Turso database:", err);
+      });
     
     // Automatically retrieve previous session if active in localStorage
     const savedUser = localStorage.getItem("dmis_logged_in_user");

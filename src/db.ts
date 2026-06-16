@@ -238,7 +238,7 @@ const initialAuditLogs: AuditLog[] = [
   }
 ];
 
-// Localstorage state manager
+// Localstorage state manager and Turso DB synchronization layer
 export class LocalDB {
   static get<T>(key: string, initialData: T): T {
     try {
@@ -261,17 +261,56 @@ export class LocalDB {
     }
   }
 
-  static reset() {
-    localStorage.clear();
-    location.reload();
+  static pushToDB(table: string, rows: any[]) {
+    fetch("/api/db/push", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ table, rows }),
+    }).catch(err => {
+      console.error(`Offline or background network error syncing ${table} table to Turso:`, err);
+    });
   }
 
-  // Typed getters/setters
+  static async pullFromDB(): Promise<boolean> {
+    try {
+      const res = await fetch("/api/db/pull");
+      if (!res.ok) return false;
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
+        if (users) this.set("users", users);
+        if (products) this.set("products", products);
+        if (customers) this.set("customers", customers);
+        if (orders) this.set("orders", orders);
+        if (deliveries) this.set("deliveries", deliveries);
+        if (complaints) this.set("complaints", complaints);
+        if (auditLogs) this.set("audit_logs", auditLogs);
+        return true;
+      }
+    } catch (e) {
+      console.error("Failed to pull fresh state from Turso backend:", e);
+    }
+    return false;
+  }
+
+  static reset() {
+    fetch("/api/db/reset", { method: "POST" })
+      .catch(err => console.error("Could not reset backend database:", err))
+      .finally(() => {
+        localStorage.clear();
+        location.reload();
+      });
+  }
+
+  // Typed getters/setters with async background propagation
   static getUsers(): User[] {
     return this.get<User[]>("users", initialUsers);
   }
   static setUsers(users: User[]): void {
     this.set("users", users);
+    this.pushToDB("users", users);
   }
 
   static getProducts(): Product[] {
@@ -279,6 +318,7 @@ export class LocalDB {
   }
   static setProducts(products: Product[]): void {
     this.set("products", products);
+    this.pushToDB("products", products);
   }
 
   static getCustomers(): Customer[] {
@@ -286,6 +326,7 @@ export class LocalDB {
   }
   static setCustomers(customers: Customer[]): void {
     this.set("customers", customers);
+    this.pushToDB("customers", customers);
   }
 
   static getOrders(): Order[] {
@@ -293,6 +334,7 @@ export class LocalDB {
   }
   static setOrders(orders: Order[]): void {
     this.set("orders", orders);
+    this.pushToDB("orders", orders);
   }
 
   static getDeliveries(): Delivery[] {
@@ -300,6 +342,7 @@ export class LocalDB {
   }
   static setDeliveries(deliveries: Delivery[]): void {
     this.set("deliveries", deliveries);
+    this.pushToDB("deliveries", deliveries);
   }
 
   static getComplaints(): Complaint[] {
@@ -307,6 +350,7 @@ export class LocalDB {
   }
   static setComplaints(complaints: Complaint[]): void {
     this.set("complaints", complaints);
+    this.pushToDB("complaints", complaints);
   }
 
   static getAuditLogs(): AuditLog[] {
@@ -314,6 +358,7 @@ export class LocalDB {
   }
   static setAuditLogs(logs: AuditLog[]): void {
     this.set("audit_logs", logs);
+    this.pushToDB("audit_logs", logs);
   }
 
   static appendLog(username: string, action: string, tableRef: string): void {

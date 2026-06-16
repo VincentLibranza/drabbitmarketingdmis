@@ -15,7 +15,10 @@ import {
   HelpCircle,
   Truck,
   ArrowUpRight,
-  Sparkles
+  Sparkles,
+  Database,
+  RefreshCw,
+  Plus
 } from "lucide-react";
 import { 
   ResponsiveContainer, 
@@ -30,7 +33,17 @@ import {
   Legend,
   Cell
 } from "recharts";
-import { Product, Order, Complaint, OrderStatus } from "../types";
+import { 
+  Product, 
+  Order, 
+  Complaint, 
+  OrderStatus, 
+  PaymentStatus, 
+  Customer, 
+  Delivery, 
+  DeliveryStatus, 
+  ComplaintStatus 
+} from "../types";
 import { LocalDB } from "../db";
 
 interface DashboardViewProps {
@@ -51,6 +64,12 @@ export default function DashboardView({
   
   const [restockAmount, setRestockAmount] = useState<{ [id: string]: number }>({});
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Simulation suite state
+  const [genType, setGenType] = useState<string>("orders");
+  const [genCount, setGenCount] = useState<number>(5);
+  const [generating, setGenerating] = useState<boolean>(false);
+  const [lastGeneratedNotes, setLastGeneratedNotes] = useState<string[]>([]);
 
   // 1. Calculations
   const totalRevenue = orders
@@ -117,6 +136,344 @@ export default function DashboardView({
     onRefreshData();
   };
 
+  // Generate Simulation Values Logic
+  const handleGenerateValues = () => {
+    setGenerating(true);
+    setLastGeneratedNotes([]);
+
+    setTimeout(() => {
+      const notes: string[] = [];
+      const now = new Date();
+
+      if (genType === "customers") {
+        const davaoNames = [
+          "Matina Food Plaza", "Lanang Bakers Guild", "Bajada Retail Express", 
+          "Toril Commercial Sea", "Agdao Wetmarket Vendor Assoc", "Magsaysay Fruit Stand", 
+          "MMCM Student Lounge Canteen", "Calinan Veggie Wholesaler", "Damosa Techno Bistro", 
+          "Sandawa General Store", "Buhangin Packaging House", "Ma-a Feed Mill Supplies"
+        ];
+        const suburbs = ["Matina", "Lanang", "Bajada", "Toril", "Agdao", "Magsaysay", "Calinan", "Damosa", "Buhangin", "Ma-a"];
+        const streets = ["McArthur Highway", "J.P. Laurel Ave", "F. Torres St", "Daliao Road", "Leon Garcia St", "Ramon Magsaysay Ave", "Bypass Road"];
+
+        const currentCusts = LocalDB.getCustomers();
+        const newCusts = [...currentCusts];
+
+        for (let i = 0; i < genCount; i++) {
+          const name = davaoNames[Math.floor(Math.random() * davaoNames.length)] + " " + (Math.floor(Math.random() * 900) + 100);
+          const suburb = suburbs[Math.floor(Math.random() * suburbs.length)];
+          const street = streets[Math.floor(Math.random() * streets.length)];
+          const address = `${Math.floor(Math.random() * 150) + 1}, ${street}, ${suburb}, Davao City`;
+          const prefix = name.toLowerCase().replace(/[^a-z]/g, "").slice(0, 10);
+          const email = `${prefix}@davaosupplies.ph`;
+          const contact = `+63 9${Math.floor(Math.random() * 99) + 10} ${Math.floor(Math.random() * 900) + 100} ${Math.floor(Math.random() * 9000) + 1000}`;
+          const tin = `${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 900) + 100}-${Math.floor(Math.random() * 900) + 100}-000`;
+          const customerId = `CST-${Math.floor(Math.random() * 9000) + 1000}`;
+
+          const newObj: Customer = {
+            customerId,
+            customerName: name,
+            contact,
+            address,
+            email,
+            tin
+          };
+          newCusts.push(newObj);
+          notes.push(`Registered Customer: "${name}" (${customerId})`);
+        }
+
+        LocalDB.setCustomers(newCusts);
+        LocalDB.appendLog(currentUser.username, `Auto-generated ${genCount} wholesale customer records via Simulation Suite`, "CUSTOMER");
+
+      } else if (genType === "products") {
+        const packagingGoods = [
+          { name: "HDPE Sando Bags (Large - 50pcs)", category: "Plastic Bags", price: 60 },
+          { name: "Degradable Cling Film (40cm x 150m)", category: "Cling Wrap", price: 210 },
+          { name: "Eco Kraft Soup Cup (250ml - 25pcs)", category: "Eco-Packaging", price: 115 },
+          { name: "Heavy Duty Green Garden Bags (10pcs)", category: "Trash Bags", price: 95 },
+          { name: "Bento Box 2-Compartment (50pcs)", category: "Plastic Containers", price: 140 },
+          { name: "Pre-cut Premium Aluminum Sheet Rolls", category: "Aluminum Foil", price: 245 },
+          { name: "Clear PET Cup Flat Lids (100pcs)", category: "Plastic Cups", price: 55 },
+          { name: "Microwavable Food Round Tub (750ml)", category: "Plastic Containers", price: 85 }
+        ];
+
+        const currentPrds = LocalDB.getProducts();
+        const newPrds = [...currentPrds];
+
+        for (let i = 0; i < genCount; i++) {
+          const item = packagingGoods[Math.floor(Math.random() * packagingGoods.length)];
+          const productId = `PRD-${Math.floor(Math.random() * 900) + 100}`;
+          const nameWithCode = `${item.name} v${Math.floor(Math.random() * 9) + 2}`;
+          const stock = Math.floor(Math.random() * 300) + 10;
+          const threshold = Math.floor(Math.random() * 40) + 15;
+
+          const newObj: Product = {
+            productId,
+            productName: nameWithCode,
+            category: item.category,
+            unitPrice: item.price,
+            stockQuantity: stock,
+            reorderThreshold: threshold
+          };
+          newPrds.push(newObj);
+          notes.push(`Added Product: "${nameWithCode}" (${productId}) Price: ₱${item.price}`);
+        }
+
+        LocalDB.setProducts(newPrds);
+        LocalDB.appendLog(currentUser.username, `Auto-generated ${genCount} packaging product inventory categories`, "PRODUCT");
+
+      } else if (genType === "orders") {
+        const currentCusts = LocalDB.getCustomers();
+        const currentPrds = LocalDB.getProducts();
+
+        if (currentCusts.length === 0 || currentPrds.length === 0) {
+          notes.push("Error: Please seed/register at least 1 customer and 1 product first!");
+        } else {
+          const currentOrders = LocalDB.getOrders();
+          const currentDeliveries = LocalDB.getDeliveries();
+          
+          const newOrders = [...currentOrders];
+          const newDeliveries = [...currentDeliveries];
+
+          const orderStatuses = [OrderStatus.Pending, OrderStatus.Confirmed, OrderStatus.Dispatched, OrderStatus.Delivered];
+          const paymentStatuses = [PaymentStatus.Unpaid, PaymentStatus.Paid, PaymentStatus.Partial];
+          const drivers = ["Benny Santos (Truck A)", "Jun-Jun Alcantara (Multi-cab B)", "Danny Boy (Truck C)", "Mark Anthony (Van D)"];
+
+          for (let i = 0; i < genCount; i++) {
+            const customer = currentCusts[Math.floor(Math.random() * currentCusts.length)];
+            const orderId = `ORD-${Math.floor(Math.random() * 90000) + 10000}`;
+            const orderRefNo = `DMIS-ORD-${newOrders.length + 1002}`;
+            
+            const daysAgo = Math.floor(Math.random() * 10);
+            const orderDate = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+
+            const status = orderStatuses[Math.floor(Math.random() * orderStatuses.length)];
+            const paymentStatus = paymentStatuses[Math.floor(Math.random() * paymentStatuses.length)];
+
+            const itemCount = Math.floor(Math.random() * 2) + 1;
+            const finalItems = [];
+            let totalAmount = 0;
+
+            const selectedProducts = [...currentPrds].sort(() => 0.5 - Math.random()).slice(0, itemCount);
+            selectedProducts.forEach((p, idx) => {
+              const qty = Math.floor(Math.random() * 5) + 2;
+              finalItems.push({
+                itemId: `ITEM-${orderId}-${idx}`,
+                orderId,
+                productId: p.productId,
+                quantity: qty,
+                unitPrice: p.unitPrice
+              });
+              totalAmount += p.unitPrice * qty;
+            });
+
+            const dueDate = new Date(Date.parse(orderDate) + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+            const newOrdObj: Order = {
+              orderId,
+              orderRefNo,
+              customerId: customer.customerId,
+              orderDate,
+              status,
+              paymentStatus,
+              totalAmount,
+              dueDate,
+              items: finalItems
+            };
+
+            newOrders.unshift(newOrdObj);
+
+            let deliveryStatus = DeliveryStatus.Pending;
+            if (status === OrderStatus.Dispatched) deliveryStatus = DeliveryStatus.InTransit;
+            if (status === OrderStatus.Delivered) deliveryStatus = DeliveryStatus.Delivered;
+
+            const newDelObj: Delivery = {
+              deliveryId: `DLV-${Math.floor(Math.random() * 9000) + 1000}`,
+              orderId,
+              scheduledDate: dueDate,
+              deliveryDate: status === OrderStatus.Delivered ? dueDate + " 14:00" : undefined,
+              status: deliveryStatus,
+              assignedDriver: deliveryStatus !== DeliveryStatus.Pending ? drivers[Math.floor(Math.random() * drivers.length)] : "Unassigned - Click Schedule"
+            };
+
+            newDeliveries.push(newDelObj);
+            notes.push(`Created Transaction: "${orderRefNo}" of ₱${totalAmount.toLocaleString()} for "${customer.customerName}"`);
+          }
+
+          LocalDB.setOrders(newOrders);
+          LocalDB.setDeliveries(newDeliveries);
+          LocalDB.appendLog(currentUser.username, `Auto-generated ${genCount} simulated wholesale transactions`, "ORDER");
+        }
+
+      } else if (genType === "complaints") {
+        const currentCusts = LocalDB.getCustomers();
+        const currentPrds = LocalDB.getProducts();
+
+        if (currentCusts.length === 0 || currentPrds.length === 0) {
+          notes.push("Error: Please seed/register at least 1 customer and 1 product first!");
+        } else {
+          const currentComplaints = LocalDB.getComplaints();
+          const newComplaints = [...currentComplaints];
+
+          const issues = [
+            "Cardboard structural damage occurred during cargo handling.",
+            "Moisture penetrated the seal, damaging the paper cup integrity.",
+            "Wrong variant delivered (medium instead of large shopping bags).",
+            "The quantity count of container boxes delivered was short by 3 bags.",
+            "Delivery delayed by 6 hours; caused warehouse gridlock.",
+            "Requested custom brand print had low-contrast colors vs design specs."
+          ];
+          const statuses = [ComplaintStatus.Open, ComplaintStatus.InProgress, ComplaintStatus.Resolved];
+          const resolutions = [
+            "Swapped damaged cartons with freshly verified safety units.",
+            "Issued standard credit invoice note v09 to billing profile.",
+            "Expedited standard replacement cargo via direct van courier same-day.",
+            "Granted administrative discount discount of 15% on upcoming purchase."
+          ];
+
+          for (let i = 0; i < genCount; i++) {
+            const customer = currentCusts[Math.floor(Math.random() * currentCusts.length)];
+            const product = currentPrds[Math.floor(Math.random() * currentPrds.length)];
+            const complaintId = `CMP-${Math.floor(Math.random() * 9000) + 1000}`;
+            const status = statuses[Math.floor(Math.random() * statuses.length)];
+            const resolution = status === ComplaintStatus.Resolved ? resolutions[Math.floor(Math.random() * resolutions.length)] : undefined;
+            const daysAgo = Math.floor(Math.random() * 5);
+            const dateLogged = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000).toISOString();
+
+            const newObj: Complaint = {
+              complaintId,
+              customerId: customer.customerId,
+              productId: product.productId,
+              description: issues[Math.floor(Math.random() * issues.length)],
+              status,
+              resolution,
+              dateLogged
+            };
+
+            newComplaints.unshift(newObj);
+            notes.push(`Logged Complaint: "${complaintId}" regarding "${product.productName}"`);
+          }
+
+          LocalDB.setComplaints(newComplaints);
+          LocalDB.appendLog(currentUser.username, `Auto-generated ${genCount} wholesale support tickets`, "COMPLAINT");
+        }
+      }
+
+      setLastGeneratedNotes(notes);
+      setGenerating(false);
+      onRefreshData();
+    }, 800);
+  };
+
+  const handleGenerateEverything = () => {
+    setGenerating(true);
+    setLastGeneratedNotes([]);
+
+    setTimeout(() => {
+      // 1. Generate 3 Customers
+      const davaoNames = ["Buhangin Bakery Hub", "Damosa Fish & Crabs", "Matina Mini-Mart", "Cabantian Cake Palace", "Lanang Meat Depot"];
+      const currentCusts = LocalDB.getCustomers();
+      const newCusts = [...currentCusts];
+      const addedCusts = [];
+      for (let i = 0; i < 3; i++) {
+        const id = `CST-${Math.floor(Math.random() * 9000) + 1000}`;
+        const name = davaoNames[i % davaoNames.length] + " (" + (Math.floor(Math.random() * 90) + 10) + ")";
+        const newObj: Customer = {
+          customerId: id,
+          customerName: name,
+          contact: `+63 919 443 ${1000 + i}`,
+          address: `San Pedro St, Davao City`,
+          email: `${name.toLowerCase().replace(/[^a-z]/g, "")}@davao.org`,
+          tin: "112-223-334-000"
+        };
+        newCusts.push(newObj);
+        addedCusts.push(newObj);
+      }
+      LocalDB.setCustomers(newCusts);
+
+      // 2. Generate 3 Products
+      const currentPrds = LocalDB.getProducts();
+      const newPrds = [...currentPrds];
+      const addedPrds = [];
+      const extraPrds = [
+        { name: "Heavy Duty Recycled Cups (50pcs)", cat: "Plastic Cups", pr: 50 },
+        { name: "Eco Brown Paper Bowls (500ml - 10pcs)", cat: "Eco-Packaging", pr: 75 },
+        { name: "Industrial Shrink Wrap Roll (Large)", cat: "Cling Wrap", pr: 310 }
+      ];
+      for (let i = 0; i < 3; i++) {
+        const id = `PRD-${Math.floor(Math.random() * 900) + 100}`;
+        const p = extraPrds[i];
+        const newObj: Product = {
+          productId: id,
+          productName: p.name,
+          category: p.cat,
+          unitPrice: p.pr,
+          stockQuantity: Math.floor(Math.random() * 150) + 50,
+          reorderThreshold: 20
+        };
+        newPrds.push(newObj);
+        addedPrds.push(newObj);
+      }
+      LocalDB.setProducts(newPrds);
+
+      // 3. Generate 3 Orders & Deliveries
+      const currentOrders = LocalDB.getOrders();
+      const currentDeliveries = LocalDB.getDeliveries();
+      const newOrders = [...currentOrders];
+      const newDeliveries = [...currentDeliveries];
+
+      for (let i = 0; i < 3; i++) {
+        const cust = addedCusts[i % addedCusts.length];
+        const prod = addedPrds[i % addedPrds.length];
+        const orderId = `ORD-${Math.floor(Math.random() * 90000) + 10000}`;
+        const refNo = `DMIS-ORD-${newOrders.length + 1002}`;
+        const orderDate = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString();
+        const qty = 5 + i * 2;
+        const total = prod.unitPrice * qty;
+
+        const newOrd: Order = {
+          orderId,
+          orderRefNo: refNo,
+          customerId: cust.customerId,
+          orderDate,
+          status: OrderStatus.Confirmed,
+          paymentStatus: PaymentStatus.Unpaid,
+          totalAmount: total,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+          items: [{
+            itemId: `ITEM-${orderId}-0`,
+            orderId,
+            productId: prod.productId,
+            quantity: qty,
+            unitPrice: prod.unitPrice
+          }]
+        };
+        newOrders.unshift(newOrd);
+
+        const newDel: Delivery = {
+          deliveryId: `DLV-${Math.floor(Math.random() * 9000) + 1000}`,
+          orderId,
+          scheduledDate: newOrd.dueDate,
+          status: DeliveryStatus.Pending,
+          assignedDriver: "Unassigned - Click Schedule"
+        };
+        newDeliveries.push(newDel);
+      }
+
+      LocalDB.setOrders(newOrders);
+      LocalDB.setDeliveries(newDeliveries);
+      LocalDB.appendLog(currentUser.username, "Instantly seeded a robust set of wholesale simulation values across all tables!", "SYSTEM");
+
+      setLastGeneratedNotes([
+        "Success: Generated 3 fresh Wholesale Customer Accounts",
+        "Success: Seeded 3 fresh Catalog Products in warehouse stock",
+        "Success: Recorded 3 fresh Customer Orders with matched Logistics workflows",
+        "Values successfully dispatched live into the Turso Database!"
+      ]);
+      setGenerating(false);
+      onRefreshData();
+    }, 1000);
+  };
+
   return (
     <div className="space-y-8">
       {/* Upper Welcomer */}
@@ -133,6 +490,104 @@ export default function DashboardView({
           <span className="block text-slate-400">Current Local Time</span>
           <span className="font-mono font-bold text-sm tracking-wide">June 15, 2026</span>
         </div>
+      </div>
+
+      {/* Sasa Smart Simulation Suite & Values Generator */}
+      <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-3 border-b border-slate-100">
+          <div>
+            <div className="flex items-center gap-1.5 font-bold text-slate-800 text-sm">
+              <Database className="w-5 h-5 text-indigo-600 shrink-0" />
+              <span>Davao Central Hub - Sasa Simulation Suite</span>
+            </div>
+            <p className="text-xs text-slate-400">Generate fully customized, realistic business values or restore specifications</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={handleGenerateEverything}
+              disabled={generating}
+              className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 text-xs px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer inline-flex items-center gap-1"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Quick Seed Everything
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div className="md:col-span-5 space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 block">Select Data Dimension</label>
+            <select
+              value={genType}
+              onChange={(e) => setGenType(e.target.value)}
+              className="w-full text-xs border border-slate-200 rounded-xl py-2 px-3 focus:outline-indigo-500 bg-white"
+            >
+              <option value="orders">Orders & Logistics Deliveries</option>
+              <option value="customers">Wholesale Customer Profiles</option>
+              <option value="products">Catalog Products & Safety Limits</option>
+              <option value="complaints">Wholesale Support Complaints</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-3 space-y-1.5">
+            <label className="text-xs font-bold text-slate-500 block">Quantity to Sprout</label>
+            <div className="flex gap-1.5">
+              {[5, 10, 20].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setGenCount(val)}
+                  className={`flex-1 text-xs py-2 px-1 rounded-xl font-bold transition-all border ${
+                    genCount === val
+                      ? "bg-indigo-600 border-indigo-650 text-white"
+                      : "bg-white border-slate-200 hover:bg-slate-50 text-slate-600"
+                  }`}
+                >
+                  +{val}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="md:col-span-4">
+            <button
+              onClick={handleGenerateValues}
+              disabled={generating}
+              className="w-full bg-indigo-650 text-white hover:bg-indigo-700 disabled:opacity-50 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              {generating ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Synthesizing values...</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-4 h-4" />
+                  <span>Generate +{genCount} {genType === 'orders' ? 'Transactions' : genType === 'customers' ? 'Clients' : genType === 'products' ? 'Products' : 'Complaints'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Results Showcase Box */}
+        {lastGeneratedNotes.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-emerald-50/70 border border-emerald-150 rounded-xl p-4 text-xs text-slate-700"
+          >
+            <p className="font-bold mb-1.5 text-emerald-900 flex items-center gap-1">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Synthesized values loaded and dispatched to Turso database:</span>
+            </p>
+            <ul className="list-disc pl-4 space-y-1 font-mono text-[11px] leading-relaxed text-emerald-800">
+              {lastGeneratedNotes.map((note, index) => (
+                <li key={index}>{note}</li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
       </div>
 
       {/* KPI Cards Grid */}

@@ -136,6 +136,47 @@ export default function UserManagementView({
     setTimeout(() => setSuccessMsg(null), 3000);
   };
 
+  // Delete user account permanently
+  const handleDeleteUser = (userId: string) => {
+    const matched = users.find(u => u.userId === userId);
+    if (!matched) return;
+
+    if (userId === currentUser.userId) {
+      if (confirm("WARNING: You are about to permanently delete YOUR OWN proprietor account. This will immediately log you out and wipe this credential profile. Do you wish to proceed?")) {
+        const currentUsersList = LocalDB.getUsers();
+        const filtered = currentUsersList.filter(u => u.userId !== userId);
+        LocalDB.setUsers(filtered);
+        
+        LocalDB.appendLog(
+          currentUser.username, 
+          `Proprietor permanently deleted their own user account: ${currentUser.name}`, 
+          "USER"
+        );
+
+        localStorage.removeItem("dmis_logged_in_user");
+        window.location.reload();
+        return;
+      }
+      return;
+    }
+
+    if (confirm(`Are you absolutely sure you want to PERMANENTLY delete the account of ${matched.name} (${matched.username})?`)) {
+      const currentUsersList = LocalDB.getUsers();
+      const filtered = currentUsersList.filter(u => u.userId !== userId);
+      LocalDB.setUsers(filtered);
+      
+      LocalDB.appendLog(
+        currentUser.username, 
+        `Permanently deleted credentials profile for: ${matched.name} (${matched.username})`, 
+        "USER"
+      );
+
+      setSuccessMsg(`User profile permanently deleted!`);
+      onRefreshData();
+      setTimeout(() => setSuccessMsg(null), 3000);
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -170,14 +211,14 @@ export default function UserManagementView({
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-sm text-slate-705">
-            <thead>
+             <thead>
               <tr className="bg-slate-50/50 text-slate-400 text-xs font-bold border-b border-slate-100 uppercase tracking-widest font-sans">
                 <th className="py-3.5 px-4">User Index</th>
                 <th className="py-3.5 px-4">Username ID</th>
                 <th className="py-3.5 px-4">Employee Full Name</th>
                 <th className="py-3.5 px-4">Role Access Credentials</th>
                 <th className="py-3.5 px-4 text-center">Security Status</th>
-                <th className="py-3.5 px-4 text-center">Permit toggles</th>
+                <th className="py-3.5 px-4 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -202,20 +243,31 @@ export default function UserManagementView({
                       {u.status}
                     </span>
                   </td>
-                  <td className="py-4 px-4 text-center">
-                    <button
-                      onClick={() => handleToggleStatus(u.userId)}
-                      disabled={u.userId === currentUser.userId}
-                      className={`text-xs font-semibold py-1.5 px-3 rounded-lg border cursor-pointer transition-all ${
-                        u.userId === currentUser.userId ? 
-                        "bg-slate-50 text-slate-350 border-slate-100 cursor-not-allowed" :
-                        u.status === UserStatus.Active ? 
-                        "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100" :
-                        "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                      }`}
-                    >
-                      {u.status === UserStatus.Active ? "Deactivate File" : "Re-activate File"}
-                    </button>
+                  <td className="py-4 px-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => handleToggleStatus(u.userId)}
+                        disabled={u.userId === currentUser.userId}
+                        className={`text-xs font-semibold py-1.5 px-3 rounded-lg border cursor-pointer transition-all ${
+                          u.userId === currentUser.userId ? 
+                          "bg-slate-50 text-slate-350 border-slate-100 cursor-not-allowed opacity-50" :
+                          u.status === UserStatus.Active ? 
+                          "bg-rose-50 border-rose-200 text-rose-700 hover:bg-rose-100" :
+                          "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                        }`}
+                        title={u.status === UserStatus.Active ? "Deactivate employee account" : "Re-activate employee account"}
+                      >
+                        {u.status === UserStatus.Active ? "Deactivate" : "Activate"}
+                      </button>
+                      
+                      <button
+                        onClick={() => handleDeleteUser(u.userId)}
+                        className="p-1.5 rounded-lg border border-rose-100 text-rose-600 hover:bg-rose-50 hover:border-rose-200 transition-all cursor-pointer inline-flex items-center justify-center"
+                        title={u.userId === currentUser.userId ? "Delete your own active proprietor profile" : "Permanently delete account"}
+                      >
+                        <Trash2 className="w-4 h-4 shrink-0" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
