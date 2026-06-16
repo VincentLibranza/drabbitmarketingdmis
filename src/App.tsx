@@ -21,7 +21,11 @@ import {
   FolderLock,
   ChevronRight,
   Menu,
-  X
+  X,
+  Database,
+  Upload,
+  Download,
+  Undo2
 } from "lucide-react";
 
 import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
@@ -102,6 +106,51 @@ export default function App() {
     if (confirm("Restore System Defaults? This resets all customer records, inventory balances, and order histories to the baseline Davao Sasa S.A.D. project specs!")) {
       LocalDB.reset();
     }
+  };
+
+  const [hasDbBackup, setHasDbBackup] = useState(() => LocalDB.hasBackup());
+
+  const handleRestoreBackup = () => {
+    if (confirm("Restore your previous database state from the auto-backup created before the reset? This will reload all your past custom configurations!")) {
+      if (LocalDB.restoreBackup()) {
+        refreshData();
+        setHasDbBackup(false);
+        localStorage.removeItem("dmis_reset_backup");
+      }
+    }
+  };
+
+  const handleExportBackup = () => {
+    const backupJson = LocalDB.exportAsJSON();
+    const blob = new Blob([backupJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Sasa_DMIS_Backup_${new Date().toISOString().split("T")[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    if (currentUser) {
+      LocalDB.appendLog(currentUser.username, "Downloaded full local database backup file", "SYSTEM");
+      refreshData();
+    }
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (LocalDB.importFromJSON(result)) {
+        refreshData();
+        setHasDbBackup(LocalDB.hasBackup());
+        alert("Database successfully restored from JSON backup!");
+      } else {
+        alert("Invalid database backup file. Please verify content format.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   // Returns to Login if no active session
@@ -214,7 +263,7 @@ export default function App() {
           </div>
 
           {/* Quick instructions and Reset DB features */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-2">
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-3.5">
             <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs text-indigo-600">
               <Settings className="w-4 h-4" />
               <span>SAD Development Control</span>
@@ -222,12 +271,54 @@ export default function App() {
             <p className="leading-relaxed text-slate-400">
               This system implements a fully reactive offline local database. Your modifications persist dynamically inside browser localStorage.
             </p>
-            <button
-              onClick={handleResetDatabase}
-              className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
-            >
-              Restore Baseline Spec Seeds
-            </button>
+            
+            <div className="space-y-2 pt-1 border-t border-slate-100">
+              <button
+                onClick={handleResetDatabase}
+                className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
+                title="Saves a snapshot backup and reverts active dataset to baseline specs"
+              >
+                Restore Baseline Spec Seeds
+              </button>
+
+              {hasDbBackup && (
+                <button
+                  onClick={handleRestoreBackup}
+                  className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-[11px]"
+                  title="Undo previous reset and bring back your custom records"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  Restore Pre-Reset Backup
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Backup & Migrations</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={handleExportBackup}
+                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700"
+                  title="Export live local DB as JSON for offline reporting"
+                >
+                  <Download className="w-3 h-3 text-slate-500" />
+                  Export JSON
+                </button>
+                <label
+                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700 cursor-pointer"
+                  title="Import and reload a previously exported JSON backup"
+                >
+                  <Upload className="w-3 h-3 text-slate-500" />
+                  Import JSON
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -289,16 +380,52 @@ export default function App() {
                   })}
                 </div>
 
-                <div className="pt-6 border-t border-slate-100 space-y-3">
+                 <div className="pt-6 border-t border-slate-100 space-y-3">
                   <button
                     onClick={() => {
                       handleResetDatabase();
                       setMobileMenuOpen(false);
                     }}
-                    className="w-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 py-2.5 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer text-center block"
+                    className="w-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 py-2 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer text-center block"
+                    title="Saves backup and clears customizations"
                   >
                     Reset baseline spec seeds
                   </button>
+
+                  {hasDbBackup && (
+                    <button
+                      onClick={() => {
+                        handleRestoreBackup();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-250 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-xs"
+                    >
+                      <Undo2 className="w-4 h-4" />
+                      Restore Pre-Reset Backup
+                    </button>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={handleExportBackup}
+                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export JSON
+                    </button>
+                    <label
+                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Import JSON
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportBackup}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
               </motion.div>
             </div>
