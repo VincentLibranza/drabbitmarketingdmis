@@ -336,7 +336,13 @@ app.post("/api/db/push", async (req, res) => {
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO users (userId, username, name, role, status) VALUES (?, ?, ?, ?, ?)",
-          args: [row.userId, row.username, row.name, row.role, row.status],
+          args: [
+            row.userId, 
+            row.username ?? null, 
+            row.name ?? null, 
+            row.role ?? null, 
+            row.status ?? null
+          ],
         });
       }
     } else if (table === "products") {
@@ -344,7 +350,14 @@ app.post("/api/db/push", async (req, res) => {
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO products (productId, productName, category, unitPrice, stockQuantity, reorderThreshold) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [row.productId, row.productName, row.category, row.unitPrice, row.stockQuantity, row.reorderThreshold],
+          args: [
+            row.productId, 
+            row.productName ?? null, 
+            row.category ?? null, 
+            row.unitPrice ?? null, 
+            row.stockQuantity ?? null, 
+            row.reorderThreshold ?? null
+          ],
         });
       }
     } else if (table === "customers") {
@@ -352,7 +365,14 @@ app.post("/api/db/push", async (req, res) => {
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO customers (customerId, customerName, contact, address, email, tin) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [row.customerId, row.customerName, row.contact, row.address, row.email, row.tin],
+          args: [
+            row.customerId, 
+            row.customerName ?? null, 
+            row.contact ?? null, 
+            row.address ?? null, 
+            row.email ?? null, 
+            row.tin ?? null
+          ],
         });
       }
     } else if (table === "orders") {
@@ -362,13 +382,13 @@ app.post("/api/db/push", async (req, res) => {
           sql: "INSERT INTO orders (orderId, orderRefNo, customerId, orderDate, status, paymentStatus, totalAmount, dueDate, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           args: [
             row.orderId,
-            row.orderRefNo,
-            row.customerId,
-            row.orderDate,
-            row.status,
-            row.paymentStatus,
-            row.totalAmount,
-            row.dueDate,
+            row.orderRefNo ?? null,
+            row.customerId ?? null,
+            row.orderDate ?? null,
+            row.status ?? null,
+            row.paymentStatus ?? null,
+            row.totalAmount ?? null,
+            row.dueDate ?? null,
             JSON.stringify(row.items || []),
           ],
         });
@@ -378,7 +398,14 @@ app.post("/api/db/push", async (req, res) => {
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO deliveries (deliveryId, orderId, scheduledDate, deliveryDate, status, assignedDriver) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [row.deliveryId, row.orderId, row.scheduledDate, row.deliveryDate, row.status, row.assignedDriver],
+          args: [
+            row.deliveryId, 
+            row.orderId ?? null, 
+            row.scheduledDate ?? null, 
+            row.deliveryDate ?? null, 
+            row.status ?? null, 
+            row.assignedDriver ?? null
+          ],
         });
       }
     } else if (table === "complaints") {
@@ -386,7 +413,15 @@ app.post("/api/db/push", async (req, res) => {
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO complaints (complaintId, customerId, productId, description, status, resolution, dateLogged) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          args: [row.complaintId, row.customerId, row.productId, row.description, row.status, row.resolution, row.dateLogged],
+          args: [
+            row.complaintId, 
+            row.customerId ?? null, 
+            row.productId ?? null, 
+            row.description ?? null, 
+            row.status ?? null, 
+            row.resolution ?? null, 
+            row.dateLogged ?? null
+          ],
         });
       }
     } else if (table === "audit_logs") {
@@ -394,7 +429,13 @@ app.post("/api/db/push", async (req, res) => {
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO audit_logs (logId, username, action, timestamp, tableRef) VALUES (?, ?, ?, ?, ?)",
-          args: [row.logId, row.username, row.action, row.timestamp, row.tableRef],
+          args: [
+            row.logId, 
+            row.username ?? null, 
+            row.action ?? null, 
+            row.timestamp ?? null, 
+            row.tableRef ?? null
+          ],
         });
       }
     } else {

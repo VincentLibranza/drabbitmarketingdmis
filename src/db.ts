@@ -268,7 +268,16 @@ export class LocalDB {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ table, rows }),
-    }).catch(err => {
+    })
+    .then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[Turso Sync Fail] Failed to sync table "${table}" to Turso backend:`, text);
+      } else {
+        console.log(`[Turso Sync Success] Synced ${rows.length} rows to table "${table}" on Turso.`);
+      }
+    })
+    .catch(err => {
       console.error(`Offline or background network error syncing ${table} table to Turso:`, err);
     });
   }
