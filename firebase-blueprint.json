@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Information about application operators and staff members",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["Proprietor", "Staff"] },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] }
+      },
+      "required": ["userId", "username", "name", "role", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Products and packaging items in the inventory catalog",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "category": { "type": "string" },
+        "unitPrice": { "type": "number" },
+        "stockQuantity": { "type": "number" },
+        "reorderThreshold": { "type": "number" }
+      },
+      "required": ["productId", "productName", "category", "unitPrice", "stockQuantity", "reorderThreshold"]
+    },
+    "Customer": {
+      "title": "Customer",
+      "description": "Wholesale business customers registered in the portal",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "contact": { "type": "string" },
+        "address": { "type": "string" },
+        "email": { "type": "string" },
+        "tin": { "type": "string" }
+      },
+      "required": ["customerId", "customerName", "contact", "address", "email"]
+    },
+    "OrderItem": {
+      "title": "OrderItem",
+      "description": "An individual product item within an order line",
+      "type": "object",
+      "properties": {
+        "itemId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" }
+      },
+      "required": ["itemId", "orderId", "productId", "quantity", "unitPrice"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Wholesale merchandise transactions and order lines",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "orderRefNo": { "type": "string" },
+        "customerId": { "type": "string" },
+        "orderDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Confirmed", "Dispatched", "Delivered", "Cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["Unpaid", "Partial", "Paid"] },
+        "totalAmount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "items": { "type": "array" }
+      },
+      "required": ["orderId", "orderRefNo", "customerId", "orderDate", "status", "paymentStatus", "totalAmount", "dueDate", "items"]
+    },
+    "Delivery": {
+      "title": "Delivery",
+      "description": "Scheduled or dispatched logistic shipments and assignments",
+      "type": "object",
+      "properties": {
+        "deliveryId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "scheduledDate": { "type": "string" },
+        "deliveryDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "In Transit", "Delivered"] },
+        "assignedDriver": { "type": "string" }
+      },
+      "required": ["deliveryId", "orderId", "scheduledDate", "status", "assignedDriver"]
+    },
+    "Complaint": {
+      "title": "Complaint",
+      "description": "Registered feedback or complaints regarding orders and stock issues",
+      "type": "object",
+      "properties": {
+        "complaintId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "productId": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Open", "In Progress", "Resolved"] },
+        "resolution": { "type": "string" },
+        "dateLogged": { "type": "string" }
+      },
+      "required": ["complaintId", "customerId", "description", "status", "dateLogged"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Historical record of activities and operations performed",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string" },
+        "username": { "type": "string" },
+        "action": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "tableRef": { "type": "string" }
+      },
+      "required": ["logId", "username", "action", "timestamp", "tableRef"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and permissions lookup"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Available stock products and reorder triggers"
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Portal business client details registry"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Order records with line item maps"
+    },
+    "/deliveries/{deliveryId}": {
+      "schema": "Delivery",
+      "description": "Delivery plans and fulfillment updates"
+    },
+    "/complaints/{complaintId}": {
+      "schema": "Complaint",
+      "description": "Client issues and support log history"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Traceability log of DMIS operations"
+    }
+  }
+}

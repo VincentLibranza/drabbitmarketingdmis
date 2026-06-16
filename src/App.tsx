@@ -30,6 +30,9 @@ import {
 
 import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
 import { LocalDB } from "./db";
+import { db, auth, handleFirestoreError, OperationType } from "./firebase";
+import { collection, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
 // Core views
 import LoginScreen from "./components/LoginScreen";
@@ -48,6 +51,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [firebaseAuthUser, setFirebaseAuthUser] = useState<any>(null);
 
   // Synchronized state pools
   const [users, setUsers] = useState<User[]>([]);
@@ -84,6 +88,74 @@ export default function App() {
       }
     }
   }, []);
+
+  // Monitor Firebase Auth changes to prevent pre-auth listing failures
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log("[Firestore Sync] Authenticated session is ready:", user.uid);
+        setFirebaseAuthUser(user);
+      } else {
+        setFirebaseAuthUser(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Bind real-time cloud listeners to sync other devices' updates automatically
+  useEffect(() => {
+    if (!firebaseAuthUser) return;
+
+    const collectionsToSync = [
+      { name: "users", idKey: "userId" },
+      { name: "products", idKey: "productId" },
+      { name: "customers", idKey: "customerId" },
+      { name: "orders", idKey: "orderId" },
+      { name: "deliveries", idKey: "deliveryId" },
+      { name: "complaints", idKey: "complaintId" },
+      { name: "audit_logs", idKey: "logId" },
+    ];
+
+    const unsubscribers = collectionsToSync.map((coll) => {
+      const collRef = collection(db, coll.name);
+      return onSnapshot(
+        collRef,
+        (snapshot) => {
+          const cloudItems: any[] = [];
+          snapshot.forEach((docSnap) => {
+            cloudItems.push(docSnap.data());
+          });
+
+          // Match local items with cloud items
+          const localItems = LocalDB.get(coll.name, []);
+          
+          // Match strings to verify real edits (independent of insertion orders)
+          const localSorted = [...localItems].sort((a: any, b: any) => String(a[coll.idKey]).localeCompare(String(b[coll.idKey])));
+          const cloudSorted = [...cloudItems].sort((a: any, b: any) => String(a[coll.idKey]).localeCompare(String(b[coll.idKey])));
+          const localStr = JSON.stringify(localSorted);
+          const cloudStr = JSON.stringify(cloudSorted);
+
+          if (cloudItems.length === 0 && localItems.length > 0) {
+            // Seed the empty cloud with whatever localItems exist!
+            console.log(`[Firestore Sync] Cloud collection ${coll.name} is empty. Seeding local dataset to cloud...`);
+            LocalDB.syncArrayToFirestore(coll.name, localItems, coll.idKey);
+          } else if (localStr !== cloudStr) {
+            console.log(`[Firestore Sync] Remote update received for ${coll.name}, synchronizing state...`);
+            LocalDB.set(coll.name, cloudItems);
+            // Refresh Active View States
+            refreshData();
+          }
+        },
+        (error) => {
+          handleFirestoreError(error, OperationType.LIST, coll.name);
+        }
+      );
+    });
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
+  }, [firebaseAuthUser]);
 
   // Secure Sign-in handler
   const handleLoginSuccess = (user: User) => {

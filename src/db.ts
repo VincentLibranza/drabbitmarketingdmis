@@ -18,6 +18,8 @@ import {
   ComplaintStatus,
   AuditLog
 } from "./types";
+import { db, auth } from "./firebase";
+import { doc, getDocs, collection, writeBatch, deleteDoc } from "firebase/firestore";
 
 // Seed Users
 const initialUsers: User[] = [
@@ -204,12 +206,43 @@ export class LocalDB {
     }
   }
 
-  // Typed getters/setters fully integrated into browser localStorage
+  static async syncArrayToFirestore(collName: string, localItems: any[], idKey: string) {
+    try {
+      const batch = writeBatch(db);
+      for (const item of localItems) {
+        if (item && item[idKey]) {
+          const docRef = doc(db, collName, item[idKey]);
+          batch.set(docRef, item);
+        }
+      }
+      await batch.commit();
+
+      const snapshot = await getDocs(collection(db, collName));
+      const localIds = new Set(localItems.map(x => x[idKey]));
+      const deleteBatch = writeBatch(db);
+      let needsDelete = false;
+      snapshot.forEach(docSnap => {
+        if (!localIds.has(docSnap.id)) {
+          deleteBatch.delete(docSnap.ref);
+          needsDelete = true;
+        }
+      });
+      if (needsDelete) {
+        await deleteBatch.commit();
+      }
+      console.log(`[Firestore Sync] Successfully synced and pruned remote collection: ${collName}`);
+    } catch (e) {
+      console.warn(`[Firestore Sync] Background database write failed for ${collName}:`, e);
+    }
+  }
+
+  // Typed getters/setters fully integrated into browser localStorage & Cloud Firestore
   static getUsers(): User[] {
     return this.get<User[]>("users", initialUsers);
   }
   static setUsers(users: User[]): void {
     this.set("users", users);
+    this.syncArrayToFirestore("users", users, "userId");
   }
 
   static getProducts(): Product[] {
@@ -217,6 +250,7 @@ export class LocalDB {
   }
   static setProducts(products: Product[]): void {
     this.set("products", products);
+    this.syncArrayToFirestore("products", products, "productId");
   }
 
   static getCustomers(): Customer[] {
@@ -224,6 +258,7 @@ export class LocalDB {
   }
   static setCustomers(customers: Customer[]): void {
     this.set("customers", customers);
+    this.syncArrayToFirestore("customers", customers, "customerId");
   }
 
   static getOrders(): Order[] {
@@ -231,6 +266,7 @@ export class LocalDB {
   }
   static setOrders(orders: Order[]): void {
     this.set("orders", orders);
+    this.syncArrayToFirestore("orders", orders, "orderId");
   }
 
   static getDeliveries(): Delivery[] {
@@ -238,6 +274,7 @@ export class LocalDB {
   }
   static setDeliveries(deliveries: Delivery[]): void {
     this.set("deliveries", deliveries);
+    this.syncArrayToFirestore("deliveries", deliveries, "deliveryId");
   }
 
   static getComplaints(): Complaint[] {
@@ -245,6 +282,7 @@ export class LocalDB {
   }
   static setComplaints(complaints: Complaint[]): void {
     this.set("complaints", complaints);
+    this.syncArrayToFirestore("complaints", complaints, "complaintId");
   }
 
   static getAuditLogs(): AuditLog[] {
@@ -252,6 +290,7 @@ export class LocalDB {
   }
   static setAuditLogs(logs: AuditLog[]): void {
     this.set("audit_logs", logs);
+    this.syncArrayToFirestore("audit_logs", logs, "logId");
   }
 
   static appendLog(username: string, action: string, tableRef: string): void {
