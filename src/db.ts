@@ -261,25 +261,37 @@ export class LocalDB {
     }
   }
 
-  static pushToDB(table: string, rows: any[]) {
-    fetch("/api/db/push", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ table, rows }),
-    })
-    .then(async (res) => {
+  static async pushToDB(table: string, rows: any[]): Promise<boolean> {
+    try {
+      const res = await fetch("/api/db/push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ table, rows }),
+      });
       if (!res.ok) {
         const text = await res.text();
         console.error(`[Turso Sync Fail] Failed to sync table "${table}" to Turso backend:`, text);
-      } else {
-        console.log(`[Turso Sync Success] Synced ${rows.length} rows to table "${table}" on Turso.`);
+        return false;
       }
-    })
-    .catch(err => {
+      console.log(`[Turso Sync Success] Synced ${rows.length} rows to table "${table}" on Turso.`);
+      return true;
+    } catch (err) {
       console.error(`Offline or background network error syncing ${table} table to Turso:`, err);
-    });
+      return false;
+    }
+  }
+
+  static async pushAllLocalToCloud(): Promise<void> {
+    console.log("Migrating all cached states to the connected cloud database...");
+    await this.pushToDB("users", this.getUsers());
+    await this.pushToDB("products", this.getProducts());
+    await this.pushToDB("customers", this.getCustomers());
+    await this.pushToDB("orders", this.getOrders());
+    await this.pushToDB("deliveries", this.getDeliveries());
+    await this.pushToDB("complaints", this.getComplaints());
+    await this.pushToDB("audit_logs", this.getAuditLogs());
   }
 
   static getDBInfo() {
@@ -287,7 +299,62 @@ export class LocalDB {
       connectionType: localStorage.getItem("dmis_db_connection_type") || "Local SQLite Fallback File",
       databaseUrl: localStorage.getItem("dmis_db_url") || "file:local.db",
       isRemote: localStorage.getItem("dmis_db_is_remote") === "true",
+      savedUrl: localStorage.getItem("dmis_db_saved_url") || "",
+      savedToken: localStorage.getItem("dmis_db_saved_token") || "",
     };
+  }
+
+  static async configureCloudDB(databaseUrl: string, authToken?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetch("/api/db/configure", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ databaseUrl, authToken }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success) {
+        localStorage.setItem("dmis_db_connection_type", json.connectionType);
+        localStorage.setItem("dmis_db_url", json.databaseUrl);
+        localStorage.setItem("dmis_db_is_remote", "true");
+        localStorage.setItem("dmis_db_saved_url", databaseUrl);
+        if (authToken) {
+          localStorage.setItem("dmis_db_saved_token", authToken);
+        } else {
+          localStorage.removeItem("dmis_db_saved_token");
+        }
+        return { success: true };
+      } else {
+        return { success: false, error: json.error || "Failed to configure cloud database." };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message || "Network error." };
+    }
+  }
+
+  static async disconnectCloudDB() {
+    localStorage.removeItem("dmis_db_connection_type");
+    localStorage.removeItem("dmis_db_url");
+    localStorage.removeItem("dmis_db_is_remote");
+    localStorage.removeItem("dmis_db_saved_url");
+    localStorage.removeItem("dmis_db_saved_token");
+    
+    // Reset backend DB connection to the standard local file
+    try {
+      await fetch("/api/db/configure", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ databaseUrl: "file:local.db" }),
+      });
+    } catch {
+      // ignore fallback error
+    }
+    
+    location.reload();
   }
 
   static async pullFromDB(): Promise<boolean> {

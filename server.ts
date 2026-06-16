@@ -10,11 +10,11 @@ const PORT = 3000;
 
 // Setup Turso Database client
 // Falls back to standard local file:local.db if no env is set
-const dbUrl = process.env.TURSO_DATABASE_URL || "file:local.db";
-const dbAuthToken = process.env.TURSO_AUTH_TOKEN || undefined;
+export let dbUrl = process.env.TURSO_DATABASE_URL || "file:local.db";
+export let dbAuthToken = process.env.TURSO_AUTH_TOKEN || undefined;
 
 console.log(`Connecting to Turso Database via: ${dbUrl}`);
-const db = createClient({
+export let db = createClient({
   url: dbUrl,
   authToken: dbAuthToken,
 });
@@ -322,6 +322,55 @@ app.get(["/api/db/status", "/db/status"], (req, res) => {
   });
 });
 
+// Endpoint to dynamically configure Turso database at runtime (cloud sync)
+app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
+  const { databaseUrl, authToken } = req.body;
+  if (!databaseUrl) {
+    return res.status(400).json({ error: "TURSO_DATABASE_URL is required." });
+  }
+
+  try {
+    console.log(`Dynamically connecting to Turso Database: ${databaseUrl}`);
+    const client = createClient({
+      url: databaseUrl,
+      authToken: authToken || undefined,
+    });
+
+    // Verify connection by running a query
+    await client.execute("SELECT 1");
+
+    // Clear db initialized flags of our server
+    dbInitialized = false;
+    initPromise = null;
+
+    // Apply the active references
+    db = client;
+    dbUrl = databaseUrl;
+    dbAuthToken = authToken || undefined;
+
+    // Initialize/migrate the newly connected Turso database tables if needed
+    await ensureDb();
+
+    let maskedUrl = databaseUrl;
+    if (databaseUrl.startsWith("libsql://")) {
+      const parts = databaseUrl.replace("libsql://", "").split(".");
+      const firstPart = parts[0] ? (parts[0].length > 6 ? parts[0].substring(0, 3) + "***" + parts[0].slice(-2) : "***") : "***";
+      maskedUrl = `libsql://${firstPart}.${parts.slice(1).join(".")}`;
+    }
+
+    res.json({
+      success: true,
+      message: "Successfully connected to cloud Turso database and initialized tables!",
+      connectionType: "Turso Cloud Database",
+      databaseUrl: maskedUrl,
+      isRemote: true
+    });
+  } catch (err: any) {
+    console.error("Failed to dynamically configure Turso cloud database:", err);
+    res.status(400).json({ error: "Failed to connect to the database: " + err.message });
+  }
+});
+
 // 1. Unified pull endpoint to load all state at startup (supports both Vercel stripped and standard paths)
 app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
   try {
@@ -404,7 +453,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
     const statements: any[] = [];
 
     if (table === "users") {
-      statements.push("DELETE FROM users");
+      statements.push({ sql: "DELETE FROM users", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO users (userId, username, name, role, status) VALUES (?, ?, ?, ?, ?)",
@@ -418,7 +467,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else if (table === "products") {
-      statements.push("DELETE FROM products");
+      statements.push({ sql: "DELETE FROM products", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO products (productId, productName, category, unitPrice, stockQuantity, reorderThreshold) VALUES (?, ?, ?, ?, ?, ?)",
@@ -433,7 +482,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else if (table === "customers") {
-      statements.push("DELETE FROM customers");
+      statements.push({ sql: "DELETE FROM customers", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO customers (customerId, customerName, contact, address, email, tin) VALUES (?, ?, ?, ?, ?, ?)",
@@ -448,7 +497,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else if (table === "orders") {
-      statements.push("DELETE FROM orders");
+      statements.push({ sql: "DELETE FROM orders", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO orders (orderId, orderRefNo, customerId, orderDate, status, paymentStatus, totalAmount, dueDate, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -466,7 +515,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else if (table === "deliveries") {
-      statements.push("DELETE FROM deliveries");
+      statements.push({ sql: "DELETE FROM deliveries", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO deliveries (deliveryId, orderId, scheduledDate, deliveryDate, status, assignedDriver) VALUES (?, ?, ?, ?, ?, ?)",
@@ -481,7 +530,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else if (table === "complaints") {
-      statements.push("DELETE FROM complaints");
+      statements.push({ sql: "DELETE FROM complaints", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO complaints (complaintId, customerId, productId, description, status, resolution, dateLogged) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -497,7 +546,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else if (table === "audit_logs") {
-      statements.push("DELETE FROM audit_logs");
+      statements.push({ sql: "DELETE FROM audit_logs", args: [] });
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO audit_logs (logId, username, action, timestamp, tableRef) VALUES (?, ?, ?, ?, ?)",

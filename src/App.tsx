@@ -54,6 +54,11 @@ export default function App() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [dbInfo, setDbInfo] = useState(() => LocalDB.getDBInfo());
+  const [cloudUrlInput, setCloudUrlInput] = useState(dbInfo.savedUrl || "");
+  const [cloudTokenInput, setCloudTokenInput] = useState(dbInfo.savedToken || "");
+  const [isConfiguring, setIsConfiguring] = useState(false);
+  const [dbConfigError, setDbConfigError] = useState<string | null>(null);
+  const [dbConfigSuccess, setDbConfigSuccess] = useState<string | null>(null);
 
   // Function to pull latest state from LocalDB
   const refreshData = () => {
@@ -72,16 +77,27 @@ export default function App() {
     // Initial display of cached localized data
     refreshData();
     
-    // Asynchronously update with live, fresh state from remote Turso cloud DB
-    LocalDB.pullFromDB()
-      .then((success) => {
+    const initBoot = async () => {
+      // Restore dynamic cloud database reference on backend if saved
+      const savedUrl = localStorage.getItem("dmis_db_saved_url");
+      const savedToken = localStorage.getItem("dmis_db_saved_token");
+      if (savedUrl) {
+        console.log("Restoring active cloud Turso DB on Express instance...");
+        await LocalDB.configureCloudDB(savedUrl, savedToken || undefined);
+      }
+
+      // Asynchronously update with live, fresh state from remote Turso cloud DB
+      try {
+        const success = await LocalDB.pullFromDB();
         if (success) {
           refreshData();
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.error("Failed syncing setup with Turso database:", err);
-      });
+      }
+    };
+
+    initBoot();
     
     // Automatically retrieve previous session if active in localStorage
     const savedUser = localStorage.getItem("dmis_logged_in_user");
@@ -109,6 +125,45 @@ export default function App() {
     }
     setCurrentUser(null);
     localStorage.removeItem("dmis_logged_in_user");
+  };
+
+  const handleConnectCloudDb = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDbConfigError(null);
+    setDbConfigSuccess(null);
+    setIsConfiguring(true);
+
+    if (!cloudUrlInput.trim()) {
+      setDbConfigError("Connection URL is required.");
+      setIsConfiguring(false);
+      return;
+    }
+
+    try {
+      const result = await LocalDB.configureCloudDB(cloudUrlInput.trim(), cloudTokenInput.trim() || undefined);
+      if (result.success) {
+        setDbConfigSuccess("Connected. Sycing existing records to cloud...");
+        await LocalDB.pushAllLocalToCloud();
+        setDbConfigSuccess("Successfully connected and synced to Turso cloud database!");
+        refreshData();
+        setTimeout(() => {
+          setDbConfigSuccess(null);
+          location.reload();
+        }, 1500);
+      } else {
+        setDbConfigError(result.error || "Failed to connect to cloud database.");
+      }
+    } catch (err: any) {
+      setDbConfigError(err.message || "An unexpected error occurred.");
+    } finally {
+      setIsConfiguring(false);
+    }
+  };
+
+  const handleDisconnectCloudDb = async () => {
+    if (confirm("Disconnect from cloud Turso DB and revert back to your local SQLite fallback?")) {
+      await LocalDB.disconnectCloudDB();
+    }
   };
 
   // Resets local storage and restores all original seeds
@@ -230,12 +285,12 @@ export default function App() {
           {/* Database Connection Status Diagnostic Panel */}
           <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-slate-950 block text-[11px] uppercase tracking-wider text-slate-400">Database Status</span>
+              <span className="font-bold text-slate-950 block text-[11px] uppercase tracking-wider text-slate-400 font-mono">Database Status</span>
               <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold ${
                 dbInfo.isRemote ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
               }`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${dbInfo.isRemote ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-                {dbInfo.isRemote ? "Remote Sync" : "Local Fallback"}
+                {dbInfo.isRemote ? "Turso Cloud" : "Local Fallback"}
               </span>
             </div>
             
@@ -252,11 +307,72 @@ export default function App() {
               </div>
             </div>
 
+            {/* Cloud Connection Form */}
+            <form onSubmit={handleConnectCloudDb} className="space-y-2 pt-2 border-t border-slate-100">
+              <span className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">Connect Turso Cloud</span>
+              
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 font-mono block font-bold">DATABASE CONNECTION URL</label>
+                <input
+                  type="text"
+                  value={cloudUrlInput}
+                  onChange={(e) => setCloudUrlInput(e.target.value)}
+                  placeholder="libsql://your-database.turso.io"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-indigo-500"
+                  disabled={isConfiguring}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] text-slate-400 font-mono block font-bold">AUTHORIZATION TOKEN</label>
+                <input
+                  type="password"
+                  value={cloudTokenInput}
+                  onChange={(e) => setCloudTokenInput(e.target.value)}
+                  placeholder="Enter Turso auth token"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-indigo-500"
+                  disabled={isConfiguring}
+                />
+              </div>
+
+              {dbConfigError && (
+                <div className="text-[10px] text-rose-600 font-sans leading-tight bg-rose-50 p-1.5 rounded border border-rose-100">
+                  ⚠️ {dbConfigError}
+                </div>
+              )}
+
+              {dbConfigSuccess && (
+                <div className="text-[10px] text-emerald-600 font-sans leading-tight bg-emerald-50 p-1.5 rounded border border-emerald-100">
+                  ✨ {dbConfigSuccess}
+                </div>
+              )}
+
+              <div className="flex gap-1.5 pt-1">
+                <button
+                  type="submit"
+                  disabled={isConfiguring}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] py-1 px-1.5 rounded-lg text-center transition cursor-pointer disabled:opacity-50"
+                >
+                  {isConfiguring ? "Connecting..." : dbInfo.isRemote ? "Update Cloud URL" : "Connect Turso Cloud"}
+                </button>
+                
+                {dbInfo.isRemote && (
+                  <button
+                    type="button"
+                    onClick={handleDisconnectCloudDb}
+                    className="bg-slate-100 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-100 text-slate-600 font-bold text-[10px] py-1 px-1.5 rounded-lg text-center transition cursor-pointer"
+                  >
+                    Disconnect
+                  </button>
+                )}
+              </div>
+            </form>
+
             {!dbInfo.isRemote && (
-              <div className="bg-amber-50/75 border border-amber-200/70 p-2.5 rounded-xl text-[11px] text-amber-800 space-y-1 leading-normal">
-                <span className="font-bold block">⚠️ Why is there no movement?</span>
+              <div className="bg-amber-50/75 border border-amber-200/70 p-2.5 rounded-xl text-[10px] text-amber-800 space-y-1 leading-normal">
+                <span className="font-bold block">💡 Fully Cloud Turso Sync:</span>
                 <span>
-                  The app is saving to its temporary local database (local.db). Set <strong>TURSO_DATABASE_URL</strong> & <strong>TURSO_AUTH_TOKEN</strong> env vars on Vercel or in AI Studio to connect your Turso Cloud directly!
+                  Enter your Turso Cloud credentials above to connect your <strong>real cloud-hosted database</strong> dynamically. Added or removed items sync instantly so database updates are live!
                 </span>
               </div>
             )}
