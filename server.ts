@@ -265,10 +265,42 @@ async function initDb() {
 
 // Database initialization called sequentially in startServer below
 
+// Cache for Db initialization state
+let dbInitialized = false;
+let initPromise: Promise<void> | null = null;
+
+async function ensureDb() {
+  if (dbInitialized) return;
+  if (!initPromise) {
+    initPromise = initDb()
+      .then(() => {
+        dbInitialized = true;
+      })
+      .catch((err) => {
+        initPromise = null; // allow retry
+        throw err;
+      });
+  }
+  await initPromise;
+}
+
+// Middeware to guarantee DB initialization before executing DB routes
+app.use(async (req, res, next) => {
+  if (req.path.includes("/db/")) {
+    try {
+      await ensureDb();
+    } catch (err: any) {
+      console.error("Database initialization failed on request stream:", err);
+      return res.status(500).json({ error: "Failed to initialize remote database: " + err.message });
+    }
+  }
+  next();
+});
+
 // --- API ROUTES ---
 
-// 1. Unified pull endpoint to load all state at startup
-app.get("/api/db/pull", async (req, res) => {
+// 1. Unified pull endpoint to load all state at startup (supports both Vercel stripped and standard paths)
+app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
   try {
     const usersRes = await db.execute("SELECT * FROM users");
     const productsRes = await db.execute("SELECT * FROM products");
@@ -321,8 +353,8 @@ app.get("/api/db/pull", async (req, res) => {
   }
 });
 
-// 2. Incremental or batch push endpoint to sync table data
-app.post("/api/db/push", async (req, res) => {
+// 2. Incremental or batch push endpoint to sync table data (supports both Vercel stripped and standard paths)
+app.post(["/api/db/push", "/db/push"], async (req, res) => {
   const { table, rows } = req.body;
   if (!table || !Array.isArray(rows)) {
     return res.status(400).json({ error: "Invalid payload. Table name and rows array required." });
@@ -452,8 +484,8 @@ app.post("/api/db/push", async (req, res) => {
   }
 });
 
-// 3. Clear and Reset DB default endpoint
-app.post("/api/db/reset", async (req, res) => {
+// 3. Clear and Reset DB default endpoint (supports both Vercel stripped and standard paths)
+app.post(["/api/db/reset", "/db/reset"], async (req, res) => {
   try {
     await db.batch([
       "DROP TABLE IF EXISTS users",
