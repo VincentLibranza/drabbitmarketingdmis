@@ -342,6 +342,7 @@ export class LocalDB {
     localStorage.removeItem("dmis_db_is_remote");
     localStorage.removeItem("dmis_db_saved_url");
     localStorage.removeItem("dmis_db_saved_token");
+    localStorage.removeItem("dmis_db_has_init_sync");
     
     // Reset backend DB connection to clean transient in-memory database
     try {
