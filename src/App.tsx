@@ -69,7 +69,15 @@ export default function App() {
     setDeliveries(LocalDB.getDeliveries());
     setComplaints(LocalDB.getComplaints());
     setAuditLogs(LocalDB.getAuditLogs());
-    setDbInfo(LocalDB.getDBInfo());
+    
+    const info = LocalDB.getDBInfo();
+    setDbInfo(info);
+    if (info.savedUrl && info.savedUrl !== "Unconfigured (Pending Connection)") {
+      setCloudUrlInput(info.savedUrl);
+    }
+    if (info.savedToken) {
+      setCloudTokenInput(info.savedToken);
+    }
   };
 
   // Sync state on boot
@@ -78,12 +86,30 @@ export default function App() {
     refreshData();
     
     const initBoot = async () => {
-      // Restore dynamic cloud database reference on backend if saved
-      const savedUrl = localStorage.getItem("dmis_db_saved_url");
-      const savedToken = localStorage.getItem("dmis_db_saved_token");
-      if (savedUrl) {
-        console.log("Restoring active cloud Turso DB on Express instance...");
-        await LocalDB.configureCloudDB(savedUrl, savedToken || undefined);
+      try {
+        // Query the backend status to see if database environment variables are already active
+        const statusRes = await fetch("/api/db/status");
+        if (statusRes.ok) {
+          const statusJson = await statusRes.json();
+          if (statusJson.isRemote) {
+            localStorage.setItem("dmis_db_is_remote", "true");
+            localStorage.setItem("dmis_db_url", statusJson.databaseUrl);
+            localStorage.setItem("dmis_db_connection_type", statusJson.connectionType);
+            if (!localStorage.getItem("dmis_db_saved_url")) {
+              localStorage.setItem("dmis_db_saved_url", statusJson.databaseUrl);
+            }
+          } else {
+            // Restore dynamic cloud database reference on backend if saved
+            const savedUrl = localStorage.getItem("dmis_db_saved_url");
+            const savedToken = localStorage.getItem("dmis_db_saved_token");
+            if (savedUrl && savedUrl !== "Unconfigured (Pending Connection)") {
+              console.log("Restoring active cloud Turso DB on Express instance...");
+              await LocalDB.configureCloudDB(savedUrl, savedToken || undefined);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed checking backend database connection status on boot:", err);
       }
 
       // Asynchronously update with live, fresh state from remote Turso cloud DB
