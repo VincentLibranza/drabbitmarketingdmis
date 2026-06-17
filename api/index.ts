@@ -8,55 +8,47 @@ const url = (process.env.TURSO_DATABASE_URL || "").trim().replace(/['"]/g, '');
 const token = (process.env.TURSO_AUTH_TOKEN || "").trim().replace(/['"]/g, '');
 const client = createClient({ url: url || "", authToken: token });
 
-// 1. Connection Status
-app.get("/api/db/status", (req, res) => {
-  res.json({ isRemote: !!url && url.startsWith("libsql"), databaseUrl: url });
-});
+// --- SCHEMA INITIALIZATION (Matches ERD exactly) ---
+async function initSchema() {
+  if (!url) return;
+  const tables = [
+    `CREATE TABLE IF NOT EXISTS users (UserID TEXT PRIMARY KEY, Username TEXT, Password TEXT, Role TEXT, Status TEXT)`,
+    `CREATE TABLE IF NOT EXISTS products (ProdID TEXT PRIMARY KEY, ProdName TEXT, Category TEXT, UnitPrice REAL, StockQty INTEGER, MinLevel INTEGER)`,
+    `CREATE TABLE IF NOT EXISTS customers (CustID TEXT PRIMARY KEY, CustName TEXT, Contact TEXT, Address TEXT, Email TEXT)`,
+    `CREATE TABLE IF NOT EXISTS orders (OrdID TEXT PRIMARY KEY, OrdRefNo TEXT, CustID TEXT, OrdDate TEXT, Status TEXT, UserID TEXT)`,
+    `CREATE TABLE IF NOT EXISTS order_items (ItemID TEXT PRIMARY KEY, OrdID TEXT, ProdID TEXT, Quantity INTEGER, UnitPrice REAL)`,
+    `CREATE TABLE IF NOT EXISTS invoices (InvID TEXT PRIMARY KEY, OrdID TEXT, InvDate TEXT, TotalAmt REAL, PayStatus TEXT)`,
+    `CREATE TABLE IF NOT EXISTS deliveries (DelID TEXT PRIMARY KEY, OrdID TEXT, SchDate TEXT, DelDate TEXT, Status TEXT)`,
+    `CREATE TABLE IF NOT EXISTS complaints (ComplID TEXT PRIMARY KEY, CustID TEXT, Description TEXT, Status TEXT, Resolution TEXT)`,
+    `CREATE TABLE IF NOT EXISTS audit_logs (LogID TEXT PRIMARY KEY, UserID TEXT, Action TEXT, Timestamp TEXT, TableRef TEXT)`
+  ];
+  for (const sql of tables) await client.execute(sql);
+}
 
-// 2. Data Pull (Cloud to Browser)
 app.get("/api/db/pull", async (req, res) => {
   try {
-    const [u, p, c, o] = await Promise.all([
-      client.execute("SELECT * FROM users"),
-      client.execute("SELECT * FROM products"),
-      client.execute("SELECT * FROM customers"),
-      client.execute("SELECT * FROM orders")
-    ]);
-    res.json({ 
-      success: true, 
-      data: { users: u.rows, products: p.rows, customers: c.rows, orders: o.rows } 
-    });
-  } catch (e: any) {
-    res.status(500).json({ success: false, error: e.message });
-  }
+    await initSchema();
+    const tables = ['users', 'products', 'customers', 'orders', 'order_items', 'invoices', 'deliveries', 'complaints', 'audit_logs'];
+    const results = await Promise.all(tables.map(t => client.execute(`SELECT * FROM ${t}`)));
+    
+    const data: any = {};
+    tables.forEach((name, i) => { data[name] = results[i].rows; });
+    res.json({ success: true, data });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// 3. Data Push (Browser to Cloud)
 app.post("/api/db/push", async (req, res) => {
   const { table, rows } = req.body;
-  if (!table || !Array.isArray(rows)) return res.status(400).json({ error: "Invalid payload" });
-
   try {
     await client.execute(`DELETE FROM ${table}`);
-
-    if (rows.length > 0) {
-      // FIX: Ensure keys are in a fixed order for every row
+    if (rows && rows.length > 0) {
       const keys = Object.keys(rows[0]);
-      const columns = keys.join(", ");
-      const placeholders = keys.map(() => "?").join(", ");
-      
-      const statements = rows.map(row => ({
-        sql: `INSERT INTO ${table} (${columns}) VALUES (${placeholders})`,
-        args: keys.map(key => row[key] ?? null) // Strict mapping
-      }));
-
-      await client.batch(statements, "write");
+      const sql = `INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`;
+      const stmts = rows.map(r => ({ sql, args: keys.map(k => r[k] ?? null) }));
+      await client.batch(stmts, "write");
     }
-    res.json({ success: true, count: rows.length });
-  } catch (e: any) {
-    console.error(`Push Error [${table}]:`, e.message);
-    res.status(500).json({ error: e.message });
-  }
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 export default app;

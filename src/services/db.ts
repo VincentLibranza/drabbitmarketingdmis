@@ -1,65 +1,54 @@
-import { User, UserRole, UserStatus, Product, Customer, Order, AuditLog } from "../types";
-
-const initialUsers: User[] = [
-  { userId: "USR-001", username: "admin", name: "Rufino N. Libranza Jr.", role: UserRole.Proprietor, status: UserStatus.Active }
-];
-
 export class LocalDB {
-  // Safe LocalStorage Getter
-  static get<T>(key: string, initialData: T): T {
+  // Pull all ERD tables from Cloud
+  static async pullFromTurso(): Promise<void> {
     try {
-      const data = localStorage.getItem(`dmis_${key}`);
-      if (!data) return initialData;
-      const parsed = JSON.parse(data);
-      // Return initialData if parsed isn't an array (to prevent crashes)
-      return Array.isArray(initialData) && !Array.isArray(parsed) ? initialData : parsed;
-    } catch { return initialData; }
+      const res = await fetch("/api/db/pull");
+      const result = await res.json();
+      if (result.success && result.data) {
+        Object.entries(result.data).forEach(([table, rows]) => {
+          localStorage.setItem(`dmis_${table}`, JSON.stringify(rows));
+        });
+        console.log("✅ ERD Database Synced");
+      }
+    } catch (e) { console.error(e); }
   }
 
-  // Safe LocalStorage Setter + Auto Cloud Sync
-  static set<T>(key: string, data: T, skipSync = false): void {
-    localStorage.setItem(`dmis_${key}`, JSON.stringify(data));
+  // Generic Push
+  static set(table: string, data: any[], skipSync = false) {
+    localStorage.setItem(`dmis_${table}`, JSON.stringify(data));
     if (!skipSync) {
       fetch("/api/db/push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ table: key, rows: data })
-      }).catch(err => console.warn(`Cloud Sync Delayed for ${key}:`, err));
+        body: JSON.stringify({ table, rows: data })
+      });
     }
   }
 
-  // Cloud Pull
-  static async pullFromTurso(): Promise<void> {
-    try {
-      const res = await fetch("/api/db/pull");
-      if (!res.ok) return;
-      const result = await res.json();
-      if (result.success && result.data) {
-        if (result.data.users) this.setUsers(result.data.users, true);
-        if (result.data.products) this.setProducts(result.data.products, true);
-        if (result.data.customers) this.setCustomers(result.data.customers, true);
-        if (result.data.orders) this.setOrders(result.data.orders, true);
-      }
-    } catch (e) { console.error("Cloud Pull Failed:", e); }
-  }
+  // Getters for ERD Tables
+  static getUsers() { return JSON.parse(localStorage.getItem("dmis_users") || "[]"); }
+  static getProducts() { return JSON.parse(localStorage.getItem("dmis_products") || "[]"); }
+  static getCustomers() { return JSON.parse(localStorage.getItem("dmis_customers") || "[]"); }
+  static getOrders() { return JSON.parse(localStorage.getItem("dmis_orders") || "[]"); }
+  static getOrderItems() { return JSON.parse(localStorage.getItem("dmis_order_items") || "[]"); }
+  static getInvoices() { return JSON.parse(localStorage.getItem("dmis_invoices") || "[]"); }
+  static getDeliveries() { return JSON.parse(localStorage.getItem("dmis_deliveries") || "[]"); }
+  static getComplaints() { return JSON.parse(localStorage.getItem("dmis_complaints") || "[]"); }
+  static getAuditLogs() { return JSON.parse(localStorage.getItem("dmis_audit_logs") || "[]"); }
 
-  // Typed Handlers
-  static getUsers(): User[] { return this.get("users", initialUsers); }
-  static setUsers(u: User[], s = false) { this.set("users", u, s); }
+  // Setters (Auto-Sync)
+  static setUsers(d: any[]) { this.set("users", d); }
+  static setProducts(d: any[]) { this.set("products", d); }
+  static setCustomers(d: any[]) { this.set("customers", d); }
+  static setOrders(d: any[]) { this.set("orders", d); }
+  static setOrderItems(d: any[]) { this.set("order_items", d); }
+  static setInvoices(d: any[]) { this.set("invoices", d); }
+  static setDeliveries(d: any[]) { this.set("deliveries", d); }
+  static setComplaints(d: any[]) { this.set("complaints", d); }
   
-  static getProducts(): Product[] { return this.get("products", []); }
-  static setProducts(p: Product[], s = false) { this.set("products", p, s); }
-  
-  static getCustomers(): Customer[] { return this.get("customers", []); }
-  static setCustomers(c: Customer[], s = false) { this.set("customers", c, s); }
-  
-  static getOrders(): Order[] { return this.get("orders", []); }
-  static setOrders(o: Order[], s = false) { this.set("orders", o, s); }
-
-  static getAuditLogs(): any[] { return this.get("audit_logs", []); }
-  static appendLog(username: string, action: string, tableRef: string) {
+  static appendLog(UserID: string, Action: string, TableRef: string) {
     const logs = this.getAuditLogs();
-    logs.unshift({ logId: `LOG-${Date.now()}`, username, action, timestamp: new Date().toISOString(), tableRef });
-    this.set("audit_logs", logs, true);
+    logs.unshift({ LogID: `LOG-${Date.now()}`, UserID, Action, Timestamp: new Date().toISOString(), TableRef });
+    this.set("audit_logs", logs);
   }
 }
