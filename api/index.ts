@@ -8,7 +8,7 @@ const url = (process.env.TURSO_DATABASE_URL || "").trim().replace(/['"]/g, '');
 const token = (process.env.TURSO_AUTH_TOKEN || "").trim().replace(/['"]/g, '');
 const client = createClient({ url: url || "", authToken: token });
 
-// --- SCHEMA INITIALIZATION (Matches ERD exactly) ---
+// --- SCHEMA INITIALIZATION (Matches your ERD exactly) ---
 async function initSchema() {
   if (!url) return;
   const tables = [
@@ -25,6 +25,12 @@ async function initSchema() {
   for (const sql of tables) await client.execute(sql);
 }
 
+// Check Status
+app.get("/api/db/status", (req, res) => {
+  res.json({ isRemote: !!url && url.startsWith("libsql"), databaseUrl: url });
+});
+
+// PULL: Gets all 9 tables for the browser
 app.get("/api/db/pull", async (req, res) => {
   try {
     await initSchema();
@@ -37,6 +43,7 @@ app.get("/api/db/pull", async (req, res) => {
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+// PUSH: Saves any table from browser to cloud
 app.post("/api/db/push", async (req, res) => {
   const { table, rows } = req.body;
   try {
