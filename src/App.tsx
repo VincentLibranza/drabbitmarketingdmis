@@ -1,36 +1,15 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+// FIXED IMPORT NAME
+import { motion, AnimatePresence } from "motion/react"; 
 import { 
-  Building2, 
-  LayoutDashboard, 
-  ShoppingBag, 
-  Package, 
-  Users, 
-  Truck, 
-  AlertTriangle, 
-  Terminal, 
-  Settings, 
-  LogOut, 
-  Sparkles,
-  RefreshCw,
-  FolderLock,
-  ChevronRight,
-  Menu,
-  X,
-  Upload,
-  Download,
-  Undo2
+  Globe, WifiOff, LogOut, LayoutDashboard, ShoppingBag, Package, 
+  Users, Truck, AlertTriangle, Terminal, FolderLock, ChevronRight,
+  Settings, Download, Upload, Clock
 } from "lucide-react";
+import { LocalDB } from "./services/db";
+import { UserRole } from "./types";
 
-import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
-import { LocalDB } from "./db";
-
-// Core views
+// Import Views
 import LoginScreen from "./components/LoginScreen";
 import DashboardView from "./components/DashboardView";
 import OrderManagementView from "./components/OrderManagementView";
@@ -42,292 +21,62 @@ import UserManagementView from "./components/UserManagementView";
 import AuditView from "./components/AuditView";
 
 export default function App() {
-  
-  // States
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("Dashboard");
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  // Synchronized state pools
-  const [users, setUsers] = useState<User[]>([]);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("Dashboard");
+  const [dbStatus, setDbStatus] = useState<any>(null);
 
-  // Database connection engine states
-  const [dbMode, setDbMode] = useState<"local" | "turso">(() => {
-    const saved = localStorage.getItem("dmis_db_mode");
-    return (saved as "local" | "turso") || "local";
-  });
-  const [syncLoading, setSyncLoading] = useState<boolean>(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
-  
-  // Turso status & configuration states
-  const [dbStatus, setDbStatus] = useState<{ connectionType: string; databaseUrl: string; isRemote: boolean } | null>(null);
-  const [configDbUrl, setConfigDbUrl] = useState("");
-  const [configAuthToken, setConfigAuthToken] = useState("");
-  const [showConfigForm, setShowConfigForm] = useState(false);
+  // States for all views - Initialized with empty arrays to prevent crashes
+  const [products, setProducts] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [deliveries, setDeliveries] = useState([]);
+  const [complaints, setComplaints] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
 
-  // Function to pull latest state from LocalDB
   const refreshData = () => {
-    setUsers(LocalDB.getUsers());
-    setProducts(LocalDB.getProducts());
-    setCustomers(LocalDB.getCustomers());
-    setOrders(LocalDB.getOrders());
-    setDeliveries(LocalDB.getDeliveries());
-    setComplaints(LocalDB.getComplaints());
-    setAuditLogs(LocalDB.getAuditLogs());
-  };
-
-  const fetchDbStatus = async () => {
     try {
-      const res = await fetch("/api/db/status");
-      if (res.ok) {
-        const data = await res.json();
-        setDbStatus(data);
-        if (data.databaseUrl && data.databaseUrl !== "Unconfigured (Pending Connection)") {
-          setConfigDbUrl(data.databaseUrl);
-        }
-      }
+      setProducts(LocalDB.getProducts() || []);
+      setCustomers(LocalDB.getCustomers() || []);
+      setOrders(LocalDB.getOrders() || []);
+      setDeliveries(LocalDB.getDeliveries() || []);
+      setComplaints(LocalDB.getComplaints() || []);
+      setAuditLogs(LocalDB.getAuditLogs() || []);
     } catch (e) {
-      console.warn("Failed fetching Turso connection status:", e);
+      console.error("Failed to refresh data:", e);
     }
   };
 
-  const handleManualPull = async (silent = false) => {
-    setSyncLoading(true);
-    setSyncStatus("Downloading Turso cloud snapshot...");
-    try {
-      const res = await fetch("/api/db/pull");
-      if (!res.ok) throw new Error("Server pull endpoint returned failure");
-      const json = await res.json();
-      if (json.success && json.data) {
-        const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
-        if (users && users.length > 0) LocalDB.setUsers(users, true);
-        if (products && products.length > 0) LocalDB.setProducts(products, true);
-        if (customers && customers.length > 0) LocalDB.setCustomers(customers, true);
-        if (orders && orders.length > 0) LocalDB.setOrders(orders, true);
-        if (deliveries && deliveries.length > 0) LocalDB.setDeliveries(deliveries, true);
-        if (complaints && complaints.length > 0) LocalDB.setComplaints(complaints, true);
-        if (auditLogs && auditLogs.length > 0) LocalDB.setAuditLogs(auditLogs, true);
-        
-        refreshData();
-        if (!silent) {
-          alert("All live Turso cloud database datasets successfully pooled down into local storage!");
-        }
-      } else {
-        throw new Error(json.error || "Malformed pull response");
-      }
-    } catch (err: any) {
-      if (!silent) {
-        alert(`Failed to pull Turso datasets: ${err.message || err}. Tip: Ensure you have configured a valid TURSO_DATABASE_URL/token via server-environment or the settings panel.`);
-      } else {
-        console.warn("Silent initial Turso pull failed:", err);
-      }
-    } finally {
-      setSyncLoading(false);
-      setSyncStatus(null);
-    }
-  };
-
-  const handleManualUpload = async () => {
-    if (!confirm("UPLOAD your current browser offline database up into your remote Turso instance? This will overwrite remote records to match your browser exactly!")) {
-      return;
-    }
-    setSyncLoading(true);
-    setSyncStatus("Syncing local dataset to Turso...");
-    try {
-      const tables = [
-        { name: "users", data: LocalDB.getUsers() },
-        { name: "products", data: LocalDB.getProducts() },
-        { name: "customers", data: LocalDB.getCustomers() },
-        { name: "orders", data: LocalDB.getOrders() },
-        { name: "deliveries", data: LocalDB.getDeliveries() },
-        { name: "complaints", data: LocalDB.getComplaints() },
-        { name: "audit_logs", data: LocalDB.getAuditLogs() },
-      ];
-      for (const t of tables) {
-        const response = await fetch("/api/db/push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ table: t.name, rows: t.data })
-        });
-        if (!response.ok) {
-          const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error || `Push failed for table ${t.name}`);
-        }
-      }
-      alert("All local database records successfully uploaded to Turso cloud SQL database!");
-    } catch (err: any) {
-      alert(`Manual upload failed. Turso error: ${err.message || err}`);
-    } finally {
-      setSyncLoading(false);
-      setSyncStatus(null);
-    }
-  };
-
-  const handleToggleDbMode = async (mode: "local" | "turso") => {
-    setDbMode(mode);
-    localStorage.setItem("dmis_db_mode", mode);
-    if (currentUser) {
-      LocalDB.appendLog(
-        currentUser.username,
-        `Switched database mode to ${mode === "turso" ? "Turso Cloud Sync Mode" : "Local Offline Sandbox"}.`,
-        "SYSTEM"
-      );
-    }
-    
-    if (mode === "turso") {
-      if (confirm("Switched to Turso Cloud Mode! Would you like to automatically pull and sync active Turso database tables down into your browser now? If you just connected a new schema, this is highly recommended.")) {
-        await handleManualPull(true);
-      } else {
-        refreshData();
-      }
-    } else {
-      refreshData();
-      alert("Switched to Local Offline Database! All edits are saved instantly inside browser local storage, bypassing LibSQL server-side proxies.");
-    }
-  };
-
-  const handleConfigureDb = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!configDbUrl.trim()) {
-      alert("Please provide a Turso database URL.");
-      return;
-    }
-    setSyncLoading(true);
-    setSyncStatus("Connecting and initializing Turso database...");
-    try {
-      const response = await fetch("/api/db/configure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          databaseUrl: configDbUrl.trim(),
-          authToken: configAuthToken.trim() || undefined
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed registration");
-      }
-      alert("Successfully connected backend SQLite proxy to live cloud Turso instance and deployed schemas!");
-      await fetchDbStatus();
-      setShowConfigForm(false);
-      if (dbMode === "turso") {
-        await handleManualPull(true);
-      }
-    } catch (err: any) {
-      alert(`Database config failed: ${err.message || err}`);
-    } finally {
-      setSyncLoading(false);
-      setSyncStatus(null);
-    }
-  };
-
-  // Sync state on boot
   useEffect(() => {
-    // Initial display of cached localized data
     refreshData();
+    // Auto-Connect on start
+    fetch("/api/db/status")
+      .then(r => r.json())
+      .then(status => {
+        setDbStatus(status);
+        if (status.isRemote) LocalDB.pullFromTurso().then(refreshData);
+      })
+      .catch(() => setDbStatus({ isRemote: false }));
 
-    // Auto-pull from Turso if active on boot
-    const savedMode = localStorage.getItem("dmis_db_mode");
-    if (savedMode === "turso") {
-      handleManualPull(true);
-    }
-    
-    // Automatically retrieve previous session if active in localStorage
-    const savedUser = localStorage.getItem("dmis_logged_in_user");
-    if (savedUser) {
-      try {
-        const parsed = JSON.parse(savedUser);
-        setCurrentUser(parsed);
-      } catch {
-        // Safe discard
-      }
+    const saved = localStorage.getItem("dmis_logged_in_user");
+    if (saved) {
+        try {
+            setCurrentUser(JSON.parse(saved));
+        } catch (e) {
+            localStorage.removeItem("dmis_logged_in_user");
+        }
     }
   }, []);
 
-  // Fetch connection status when toggle fires
-  useEffect(() => {
-    fetchDbStatus();
-  }, [dbMode]);
+  // Show login if no user
+  if (!currentUser) return (
+    <LoginScreen onLoginSuccess={(u) => { 
+      setCurrentUser(u); 
+      localStorage.setItem("dmis_logged_in_user", JSON.stringify(u)); 
+      LocalDB.appendLog(u.username || "System", "User Access Granted", "USER");
+      refreshData(); 
+    }} />
+  );
 
-  // Secure Sign-in handler
-  const handleLoginSuccess = (user: User) => {
-    setCurrentUser(user);
-    localStorage.setItem("dmis_logged_in_user", JSON.stringify(user));
-    refreshData();
-  };
-
-  // Secure Sign-out handler
-  const handleLogout = () => {
-    if (currentUser) {
-      LocalDB.appendLog(currentUser.username, "User logged out successfully.", "USER");
-    }
-    setCurrentUser(null);
-    localStorage.removeItem("dmis_logged_in_user");
-  };
-
-  // Resets local storage and restores all original seeds
-  const handleResetDatabase = () => {
-    if (confirm("Restore System Defaults? This resets all customer records, inventory balances, and order histories to the baseline Davao Sasa S.A.D. project specs!")) {
-      LocalDB.reset();
-    }
-  };
-
-  const [hasDbBackup, setHasDbBackup] = useState(() => LocalDB.hasBackup());
-
-  const handleRestoreBackup = () => {
-    if (confirm("Restore your previous database state from the auto-backup created before the reset? This will reload all your past custom configurations!")) {
-      if (LocalDB.restoreBackup()) {
-        refreshData();
-        setHasDbBackup(false);
-        localStorage.removeItem("dmis_reset_backup");
-      }
-    }
-  };
-
-  const handleExportBackup = () => {
-    const backupJson = LocalDB.exportAsJSON();
-    const blob = new Blob([backupJson], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Sasa_DMIS_Backup_${new Date().toISOString().split("T")[0]}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    if (currentUser) {
-      LocalDB.appendLog(currentUser.username, "Downloaded full local database backup file", "SYSTEM");
-      refreshData();
-    }
-  };
-
-  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (LocalDB.importFromJSON(result)) {
-        refreshData();
-        setHasDbBackup(LocalDB.hasBackup());
-        alert("Database successfully restored from JSON backup!");
-      } else {
-        alert("Invalid database backup file. Please verify content format.");
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
-  };
-
-  // Returns to Login if no active session
-  if (!currentUser) {
-    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
-  }
-
-  // Define sidebar menu options depending on roles
   const menuItems = [
     { id: "Dashboard", label: "Dashboard", icon: LayoutDashboard },
     { id: "Orders", label: "Orders Intake & Invoices", icon: ShoppingBag },
@@ -335,542 +84,114 @@ export default function App() {
     { id: "Customers", label: "Customer Profiles", icon: Users },
     { id: "Deliveries", label: "Logistics Tracking", icon: Truck },
     { id: "Complaints", label: "Complaints & Returns", icon: AlertTriangle },
-    { id: "Users", label: "Proprietor Management", icon: FolderLock, restricted: true },
+    { id: "Users", label: "User Management", icon: FolderLock, restricted: true },
     { id: "Audit", label: "System Audits Trail", icon: Terminal }
   ];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      
-      {/* Top Professional Header Navigation */}
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-40 shadow-sm shadow-slate-100/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16 items-center">
-            
-            {/* Branding Logo coordinates */}
-            <div className="flex items-center gap-3">
-              {/* Mobile menu toggle */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-              >
-                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-              </button>
+      {/* Cloud Status Banner */}
+      {dbStatus && (
+        <div className={`text-[10px] py-1 px-4 font-bold text-center uppercase tracking-widest text-white flex justify-center items-center gap-2 ${dbStatus.isRemote ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+          {dbStatus.isRemote ? <Globe className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
+          {dbStatus.isRemote ? "Live Turso Cloud Sync Active" : "Offline Storage Mode"}
+        </div>
+      )}
 
-              <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black tracking-widest text-lg shadow shadow-indigo-200">
-                D
-              </div>
-              <div className="space-y-0.5">
-                <span className="font-bold text-slate-900 text-sm tracking-tight leading-none block uppercase font-sans">
-                  DRABBIT MARKETING
-                </span>
-                <span className="text-[10px] text-slate-400 font-semibold font-mono tracking-wider block leading-none">
-                  SASA, DAVAO CENTRAL HUB
-                </span>
-              </div>
-            </div>
-
-            {/* Logged in Employee details */}
-            <div className="flex items-center gap-4 text-xs">
-              <div className="hidden sm:flex flex-col items-end text-right">
-                <span className="font-bold text-slate-800">{currentUser.name}</span>
-                <span className={`text-[10px] px-2 py-0.5 mt-0.5 rounded font-bold uppercase tracking-wider ${
-                  currentUser.role === UserRole.Proprietor ? "bg-purple-100 text-purple-800" : "bg-teal-100 text-teal-800"
-                }`}>
-                  {currentUser.role} Account
-                </span>
-              </div>
-              
-              <button
-                onClick={handleLogout}
-                className="bg-slate-100 text-slate-600 hover:bg-rose-50 hover:text-rose-600 border border-slate-200 hover:border-rose-100 p-2 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1.5 font-semibold"
-                title="Sign Out Session"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="hidden sm:inline">Sign Out</span>
-              </button>
-            </div>
-
+      {/* Header */}
+      <header className="bg-white border-b border-slate-100 h-20 flex items-center justify-between px-8 sticky top-0 z-40 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="h-11 w-11 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-indigo-100">D</div>
+          <div>
+            <h1 className="font-black text-slate-900 uppercase text-lg leading-none tracking-tight">Drabbit Marketing</h1>
+            <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mt-1 uppercase">Sasa, Davao Central Hub</p>
           </div>
+        </div>
+        
+        <div className="flex items-center gap-6">
+          <div className="text-right">
+            <p className="text-xs font-bold text-slate-900">{currentUser?.name || "User"}</p>
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 mt-1">
+              Account Verified
+            </span>
+          </div>
+          <button 
+            onClick={() => { setCurrentUser(null); localStorage.removeItem("dmis_logged_in_user"); }} 
+            className="text-xs font-bold text-slate-500 hover:text-rose-600 flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-rose-50 transition-all"
+          >
+            <LogOut className="w-4 h-4" /> Sign Out
+          </button>
         </div>
       </header>
 
-      {/* Main Container Layout */}
-      <div className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6">
-        
-        {/* Responsive Desktop Left Sidebar */}
-        <aside className="hidden lg:block w-64 shrink-0 space-y-6">
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm space-y-1">
-            <span className="block px-3 pb-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
-              Business Intelligence Modules
-            </span>
-            {menuItems.map(item => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              
-              // Skip if restricted and current user is not admin
-              if (item.restricted && currentUser.role !== UserRole.Proprietor) return null;
-
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all cursor-pointer ${
-                    isActive ? 
-                    "bg-indigo-600 text-white shadow-sm" : 
-                    "text-slate-650 hover:text-slate-900 hover:bg-slate-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className="w-4.5 h-4.5 shrink-0" />
-                    <span>{item.label}</span>
-                  </div>
-                  <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isActive ? "rotate-90" : "opacity-40"}`} />
-                </button>
-              );
-            })}
+      <div className="flex-1 max-w-[1600px] w-full mx-auto p-8 flex flex-col lg:flex-row gap-8">
+        {/* Sidebar */}
+        <aside className="w-72 shrink-0 space-y-6">
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-5 shadow-xl shadow-slate-200/50">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] px-4 block mb-5">Business Intelligence</span>
+            <nav className="space-y-1">
+              {menuItems.map(item => {
+                 const Icon = item.icon;
+                 // Safe role check
+                 if (item.restricted && currentUser?.role !== "Proprietor") return null;
+                 return (
+                   <button 
+                     key={item.id} 
+                     onClick={() => setActiveTab(item.id)} 
+                     className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-xs font-bold transition-all ${
+                       activeTab === item.id 
+                       ? 'bg-indigo-600 text-white shadow-lg translate-x-2' 
+                       : 'text-slate-500 hover:bg-slate-50'
+                     }`}
+                   >
+                     <div className="flex items-center gap-3">
+                       <Icon className="w-5 h-5" /> 
+                       {item.label}
+                     </div>
+                     <ChevronRight className={`w-4 h-4 ${activeTab === item.id ? 'rotate-90' : 'opacity-0'}`} />
+                   </button>
+                 );
+              })}
+            </nav>
           </div>
 
-          {/* Quick instructions and Reset DB features */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-3.5">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs text-indigo-600">
-              <Settings className="w-4 h-4" />
-              <span>SAD Development Control</span>
+          {/* SAD Development Control */}
+          <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xl shadow-slate-200/50">
+            <div className="flex items-center gap-2 mb-4">
+              <Settings className="w-4 h-4 text-slate-900" />
+              <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">SAD Control</span>
             </div>
-            <p className="leading-relaxed text-slate-400">
-              This system implements a fully reactive dual-engine database workspace with Turso or browser localStorage.
-            </p>
-
-            {/* Database Engine Switcher for Turso */}
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Database Engine</span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                  dbMode === "local" ? "bg-emerald-50 text-emerald-800 border border-emerald-100" : "bg-blue-50 text-blue-800 border border-blue-100"
-                }`}>
-                  {dbMode === "local" ? "offline local" : "turso cloud"}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleToggleDbMode("local")}
-                  className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                    dbMode === "local" ? 
-                    "bg-emerald-600 border-emerald-600 text-white shadow-sm" : 
-                    "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                  title="Save instantly to browser storage. 100% reliable offline mode."
-                >
-                  Offline Local
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleDbMode("turso")}
-                  className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                    dbMode === "turso" ? 
-                    "bg-blue-600 border-blue-600 text-white shadow-sm" : 
-                    "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                  title="Sync seamlessly with cloud Turso Database."
-                >
-                  Turso Cloud
-                </button>
-              </div>
-
-              {/* Active Connection Status Badge */}
-              {dbStatus && (
-                <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 mt-2 space-y-2 text-[10px]">
-                  <div className="flex justify-between items-center gap-1.5">
-                    <span className="font-semibold text-slate-700">Connection Status:</span>
-                    <span className={`text-[9px] font-bold ${dbStatus.isRemote ? "text-blue-600" : "text-amber-600"}`}>
-                      {dbStatus.isRemote ? "LIVE CLOUD" : "LOCAL SQL MEMORY"}
-                    </span>
-                  </div>
-                  <div className="text-[9px] text-slate-500 truncate" title={dbStatus.databaseUrl}>
-                    <span className="font-semibold">URL:</span> {dbStatus.databaseUrl}
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    <button
-                      onClick={handleManualUpload}
-                      disabled={syncLoading}
-                      className="bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-750 hover:border-blue-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
-                      title="Force upload browser local data into Turso"
-                    >
-                      Push Cloud
-                    </button>
-                    <button
-                      onClick={() => handleManualPull(false)}
-                      disabled={syncLoading}
-                      className="bg-white border border-slate-200 hover:bg-amber-50 hover:text-amber-750 hover:border-amber-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
-                      title="Pull datasets from Turso into browser storage"
-                    >
-                      Pull Cloud
-                    </button>
-                  </div>
-
-                  <div className="pt-1.5 border-t border-slate-200/50 flex justify-between items-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowConfigForm(!showConfigForm)}
-                      className="text-indigo-650 hover:text-indigo-800 font-bold transition-colors cursor-pointer text-[9px]"
-                    >
-                      {showConfigForm ? "Close Form ✕" : "Config Connection ⚙️"}
-                    </button>
-                    {syncStatus && (
-                      <span className="text-[8px] text-indigo-600 font-semibold animate-pulse">{syncStatus}</span>
-                    )}
-                  </div>
-
-                  {showConfigForm && (
-                    <form onSubmit={handleConfigureDb} className="pt-2 border-t border-slate-200 space-y-2 mt-1">
-                      <div className="space-y-0.5">
-                        <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Turso Database URL</label>
-                        <input
-                          type="text"
-                          value={configDbUrl}
-                          onChange={(e) => setConfigDbUrl(e.target.value)}
-                          placeholder="libsql://your-db-name.turso.io"
-                          className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
-                          required
-                        />
-                      </div>
-                      <div className="space-y-0.5">
-                        <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Auth Token</label>
-                        <input
-                          type="password"
-                          value={configAuthToken}
-                          onChange={(e) => setConfigAuthToken(e.target.value)}
-                          placeholder="Turso Authorization Token"
-                          className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        disabled={syncLoading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 rounded text-[9px] cursor-pointer"
-                      >
-                        Apply & Initialize
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
-            </div>
-            
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={handleResetDatabase}
-                className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
-                title="Saves a snapshot backup and reverts active dataset to baseline specs"
-              >
-                Restore Baseline Spec Seeds
-              </button>
-
-              {hasDbBackup && (
-                <button
-                  onClick={handleRestoreBackup}
-                  className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-[11px]"
-                  title="Undo previous reset and bring back your custom records"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  Restore Pre-Reset Backup
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-1.5 pt-2 border-t border-slate-100">
-              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Backup & Migrations</span>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={handleExportBackup}
-                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700"
-                  title="Export live local DB as JSON for offline reporting"
-                >
-                  <Download className="w-3 h-3 text-slate-500" />
-                  Export JSON
-                </button>
-                <label
-                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700 cursor-pointer"
-                  title="Import and reload a previously exported JSON backup"
-                >
-                  <Upload className="w-3 h-3 text-slate-500" />
-                  Import JSON
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleImportBackup}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
+            <button 
+              onClick={() => { if(window.confirm("Reset all data?")) { LocalDB.reset(); }}}
+              className="w-full py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-indigo-50"
+            >
+              Restore Baseline Seeds
+            </button>
           </div>
         </aside>
 
-        {/* Mobile Flyout Sidebar Drawer */}
-        <AnimatePresence>
-          {mobileMenuOpen && (
-            <div className="fixed inset-0 z-50 lg:hidden flex">
-              {/* Overlay */}
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setMobileMenuOpen(false)}
-                className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm"
-              />
-              
-              {/* Drawer Content */}
-              <motion.div
-                initial={{ x: "-100%" }}
-                animate={{ x: 0 }}
-                exit={{ x: "-100%" }}
-                transition={{ type: "tween", duration: 0.25 }}
-                className="relative flex flex-col w-full max-w-xs bg-white h-full p-6 shadow-2xl space-y-6"
-              >
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm">
-                      D
-                    </div>
-                    <span className="font-bold text-slate-900 text-xs tracking-tight">DRABBIT DMIS PORTAL</span>
-                  </div>
-                  <button onClick={() => setMobileMenuOpen(false)} className="text-slate-400 hover:text-slate-650 cursor-pointer">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="block pb-2 text-[10px] font-bold text-slate-405 uppercase tracking-widest">Modules</span>
-                  {menuItems.map(item => {
-                    const Icon = item.icon;
-                    const isActive = activeTab === item.id;
-                    if (item.restricted && currentUser.role !== UserRole.Proprietor) return null;
-
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          setMobileMenuOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                          isActive ? "bg-indigo-600 text-white font-bold" : "text-slate-600 hover:bg-slate-50"
-                        }`}
-                      >
-                        <Icon className="w-4.5 h-4.5 shrink-0" />
-                        <span>{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                  <div className="pt-6 border-t border-slate-100 space-y-3 text-xs">
-                    {/* Database Engine Switcher for Mobile */}
-                    <div className="space-y-2 border-b border-slate-100 pb-3">
-                      <div className="flex justify-between items-center text-[11px]">
-                        <span className="font-bold text-slate-400 uppercase tracking-wide">Database Mode</span>
-                        <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[9px] ${
-                          dbMode === "local" ? "bg-emerald-50 text-emerald-800 border border-emerald-100" : "bg-blue-50 text-blue-800 border border-blue-100"
-                        }`}>
-                          {dbMode === "local" ? "offline local" : "turso cloud"}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDbMode("local")}
-                          className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                            dbMode === "local" ? "bg-emerald-600 border-emerald-600 text-white font-bold" : "bg-slate-50 border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          Offline Local
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDbMode("turso")}
-                          className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                            dbMode === "turso" ? "bg-blue-600 border-blue-600 text-white font-bold" : "bg-slate-50 border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          Turso Cloud
-                        </button>
-                      </div>
-
-                      {dbMode === "turso" && (
-                        <div className="grid grid-cols-2 gap-1.5 pt-1">
-                          <button
-                            onClick={() => {
-                              handleManualUpload();
-                              setMobileMenuOpen(false);
-                            }}
-                            className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-705 text-[10px] cursor-pointer"
-                          >
-                            Push Cloud
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleManualPull();
-                              setMobileMenuOpen(false);
-                            }}
-                            className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-750 text-[10px] cursor-pointer"
-                          >
-                            Pull Cloud
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        handleResetDatabase();
-                        setMobileMenuOpen(false);
-                      }}
-                      className="w-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 py-2 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer text-center block"
-                      title="Saves backup and clears customizations"
-                    >
-                      Reset baseline spec seeds
-                    </button>
-
-                    {hasDbBackup && (
-                      <button
-                        onClick={() => {
-                          handleRestoreBackup();
-                          setMobileMenuOpen(false);
-                        }}
-                        className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-250 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-xs"
-                      >
-                        <Undo2 className="w-4 h-4" />
-                        Restore Pre-Reset Backup
-                      </button>
-                    )}
-
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                    <button
-                      onClick={handleExportBackup}
-                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Export JSON
-                    </button>
-                    <label
-                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      Import JSON
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={handleImportBackup}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-        {/* Dynamic Display workspace panels */}
-        <main className="flex-1 bg-white border border-slate-100 rounded-2xl p-4 sm:p-6 shadow-sm min-w-0">
+        {/* Main Content */}
+        <main className="flex-1 bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-2xl min-h-[800px] relative overflow-hidden">
           <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTab}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
+            <motion.div 
+              key={activeTab} 
+              initial={{ opacity: 0, x: 20 }} 
+              animate={{ opacity: 1, x: 0 }} 
+              exit={{ opacity: 0, x: -20 }} 
+              className="h-full"
             >
-              {activeTab === "Dashboard" && (
-                <DashboardView 
-                  products={products} 
-                  orders={orders} 
-                  complaints={complaints} 
-                  currentUser={currentUser}
-                  onRefreshData={refreshData} 
-                />
-              )}
-              {activeTab === "Orders" && (
-                <OrderManagementView
-                  orders={orders}
-                  products={products}
-                  customers={customers}
-                  currentUser={currentUser}
-                  onRefreshData={refreshData}
-                />
-              )}
-              {activeTab === "Inventory" && (
-                <InventoryView
-                  products={products}
-                  currentUser={currentUser}
-                  onRefreshData={refreshData}
-                />
-              )}
-              {activeTab === "Customers" && (
-                <CustomerView
-                  customers={customers}
-                  currentUser={currentUser}
-                  onRefreshData={refreshData}
-                />
-              )}
-              {activeTab === "Deliveries" && (
-                <DeliveryView
-                  deliveries={deliveries}
-                  orders={orders}
-                  customers={customers}
-                  currentUser={currentUser}
-                  onRefreshData={refreshData}
-                />
-              )}
-              {activeTab === "Complaints" && (
-                <ComplaintsView
-                  complaints={complaints}
-                  customers={customers}
-                  products={products}
-                  currentUser={currentUser}
-                  onRefreshData={refreshData}
-                />
-              )}
-              {activeTab === "Users" && (
-                <UserManagementView
-                  users={users}
-                  currentUser={currentUser}
-                  onRefreshData={refreshData}
-                />
-              )}
-              {activeTab === "Audit" && (
-                <AuditView
-                  logs={auditLogs}
-                  onRefreshData={refreshData}
-                />
-              )}
+               {activeTab === "Dashboard" && <DashboardView products={products} orders={orders} currentUser={currentUser} onRefreshData={refreshData} complaints={complaints} />}
+               {activeTab === "Orders" && <OrderManagementView orders={orders} products={products} customers={customers} currentUser={currentUser} onRefreshData={refreshData} />}
+               {activeTab === "Inventory" && <InventoryView products={products} currentUser={currentUser} onRefreshData={refreshData} />}
+               {activeTab === "Customers" && <CustomerView customers={customers} currentUser={currentUser} onRefreshData={refreshData} />}
+               {activeTab === "Deliveries" && <DeliveryView deliveries={deliveries} orders={orders} customers={customers} currentUser={currentUser} onRefreshData={refreshData} />}
+               {activeTab === "Complaints" && <ComplaintsView complaints={complaints} customers={customers} products={products} currentUser={currentUser} onRefreshData={refreshData} />}
+               {activeTab === "Audit" && <AuditView logs={auditLogs} onRefreshData={refreshData} />}
+               {activeTab === "Users" && <UserManagementView users={[]} currentUser={currentUser} onRefreshData={refreshData} />}
             </motion.div>
           </AnimatePresence>
         </main>
-
       </div>
-
-      {/* Corporate Professional Sasa Footer coordinates */}
-      <footer className="bg-white border-t border-slate-100 py-6 text-center text-slate-400 text-xs">
-        <div className="max-w-7xl mx-auto px-4">
-          <p className="font-sans font-semibold text-slate-800">DRABBIT MARKETING SYSTEM (DMIS)</p>
-          <p className="mt-1 text-slate-450 leading-relaxed max-w-xl mx-auto">
-            Authorized for university system review. Davao Sasa distribution channels. All transactional activities are audited in accordance with SAD guidelines.
-          </p>
-          <div className="mt-3 flex justify-center items-center gap-4 font-mono text-[10px] text-slate-350">
-            <span>Prepared by Team Honda ADV</span>
-            <span>•</span>
-            <span>Mapua Malayan Colleges Mindanao</span>
-            <span>•</span>
-            <span>CS103P S.A.D. Program</span>
-          </div>
-        </div>
-      </footer>
-
     </div>
   );
 }

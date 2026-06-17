@@ -18,7 +18,7 @@ import {
   FileText
 } from "lucide-react";
 import { Complaint, ComplaintStatus, Customer, Product } from "../types";
-import { LocalDB } from "../db";
+import { LocalDB } from "../services/db";
 
 interface ComplaintsViewProps {
   complaints: Complaint[];

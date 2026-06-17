@@ -17,7 +17,7 @@ import {
   UserPlus
 } from "lucide-react";
 import { User, UserRole, UserStatus } from "../types";
-import { LocalDB } from "../db";
+import { LocalDB } from "../services/db";
 
 interface UserManagementViewProps {
   users: User[];

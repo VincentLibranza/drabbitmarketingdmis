@@ -19,7 +19,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { Product } from "../types";
-import { LocalDB } from "../db";
+import { LocalDB } from "../services/db";
 
 interface InventoryViewProps {
   products: Product[];
