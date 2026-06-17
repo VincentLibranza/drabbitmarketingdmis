@@ -228,74 +228,6 @@ export default function OrderManagementView({
     return matchesSearch && o.status === statusFilter;
   });
 
-  // Export Current Filtered Orders list to CSV
-  const handleExportCSV = () => {
-    const escapeCSV = (str: string) => {
-      if (str === null || str === undefined) return "";
-      const s = String(str);
-      if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\r")) {
-        return `"${s.replace(/"/g, '""')}"`;
-      }
-      return s;
-    };
-
-    const headers = [
-      "Order Reference",
-      "Customer Name",
-      "Customer Contact",
-      "Date Placed",
-      "Total Amount (PHP)",
-      "Fulfillment Status",
-      "Payment Status",
-      "Due Date",
-      "Total Items Ordered",
-      "Purchased Sku Details"
-    ];
-
-    const rows = filteredOrders.map(o => {
-      const customer = customers.find(c => c.customerId === o.customerId);
-      const totalItems = o.items.reduce((acc, item) => acc + item.quantity, 0);
-      
-      const itemDetailsStr = o.items.map(item => {
-        const prod = products.find(p => p.productId === item.productId);
-        const prodLabel = prod ? prod.productName : "Unlisted Product";
-        return `${prodLabel} (${item.quantity} units @ ₱${item.unitPrice})`;
-      }).join("; ");
-
-      return [
-        o.orderRefNo,
-        customer?.customerName || "Walk-In buyer",
-        customer?.contact || "N/A",
-        new Date(o.orderDate).toLocaleString("en-US"),
-        o.totalAmount,
-        o.status,
-        o.paymentStatus,
-        o.dueDate,
-        totalItems,
-        itemDetailsStr
-      ];
-    });
-
-    const csvContent = [
-      headers.map(escapeCSV).join(","),
-      ...rows.map(row => row.map(cell => escapeCSV(String(cell))).join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Order_Ledger_Report_${new Date().toISOString().split("T")[0]}.csv`);
-    link.click();
-    URL.revokeObjectURL(url);
-
-    LocalDB.appendLog(
-      currentUser.username,
-      `Exported filtered order book of ${filteredOrders.length} records as CSV`,
-      "ORDER"
-    );
-  };
-
   // Calculate Form Basket Totals
   const calculateFormTotal = () => {
     return formItems.reduce((sum, item) => {
@@ -507,23 +439,13 @@ export default function OrderManagementView({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end w-full sm:w-auto">
-          <button
-            onClick={handleExportCSV}
-            className="border border-slate-200 hover:bg-slate-50 cursor-pointer text-slate-705 font-semibold text-sm px-4 py-2.5 rounded-xl flex items-center gap-2 flex-1 sm:flex-initial justify-center transition-all shadow-sm"
-            title="Export standard CSV reports of current filtered order log"
-          >
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="bg-indigo-600 hover:bg-indigo-500 cursor-pointer text-white font-semibold text-sm px-4 py-2.5 rounded-xl flex items-center gap-2 flex-1 sm:flex-initial justify-center transition-all shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            Create Order
-          </button>
-        </div>
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="bg-indigo-600 hover:bg-indigo-500 cursor-pointer text-white font-semibold text-sm px-4 py-2.5 rounded-xl flex items-center gap-2 self-stretch sm:self-auto justify-center transition-all shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          Create Order
+        </button>
       </div>
 
       {/* Orders Grid/Table Display */}

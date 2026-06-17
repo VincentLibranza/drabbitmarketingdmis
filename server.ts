@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import fs from "fs";
 import { createClient } from "@libsql/client";
 import dotenv from "dotenv";
 
@@ -9,101 +8,16 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
-// Setup Turso Database client with lazy initialization & quote normalization
-let rawUrl = (process.env.TURSO_DATABASE_URL || "").trim();
-let rawToken = (process.env.TURSO_AUTH_TOKEN || "").trim();
+// Setup Turso Database client
+// Falls back to standard local file:local.db if no env is set
+const dbUrl = process.env.TURSO_DATABASE_URL || "file:local.db";
+const dbAuthToken = process.env.TURSO_AUTH_TOKEN || undefined;
 
-const configFilePath = path.join(process.cwd(), "turso-config.json");
-
-if (!rawUrl && fs.existsSync(configFilePath)) {
-  try {
-    const fileContent = fs.readFileSync(configFilePath, "utf8");
-    const parsed = JSON.parse(fileContent);
-    if (parsed.databaseUrl) {
-      rawUrl = parsed.databaseUrl.trim();
-      rawToken = (parsed.authToken || "").trim();
-      console.log(`[Turso Config] Restored database connection URL from turso-config.json: ${rawUrl}`);
-    }
-  } catch (err) {
-    console.error("[Turso Config] Failed to read turso-config.json:", err);
-  }
-}
-
-// Strip wrap-around quotes (single/double) if they are present in env variables
-if (rawUrl) {
-  if (rawUrl.startsWith('"') && rawUrl.endsWith('"')) {
-    rawUrl = rawUrl.slice(1, -1).trim();
-  } else if (rawUrl.startsWith("'") && rawUrl.endsWith("'")) {
-    rawUrl = rawUrl.slice(1, -1).trim();
-  }
-}
-if (rawToken) {
-  if (rawToken.startsWith('"') && rawToken.endsWith('"')) {
-    rawToken = rawToken.slice(1, -1).trim();
-  } else if (rawToken.startsWith("'") && rawToken.endsWith("'")) {
-    rawToken = rawToken.slice(1, -1).trim();
-  }
-}
-
-// Fallback to persistent local file-based database so changes survive backend server reloads
-export let dbUrl = rawUrl || "file:local.db";
-export let dbAuthToken = rawToken || undefined;
-
-let dbClientInstance: any = null;
-
-function getDbClient() {
-  if (!dbClientInstance) {
-    if (!dbUrl) {
-      throw new Error("No database URL configured. Please set TURSO_DATABASE_URL environment variable.");
-    }
-    console.log(`Initializing LibSQL connection via: ${dbUrl}`);
-    dbClientInstance = createClient({
-      url: dbUrl,
-      authToken: dbAuthToken,
-    });
-  }
-  return dbClientInstance;
-}
-
-async function executeWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 1000): Promise<T> {
-  let lastError: any = null;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      return await fn();
-    } catch (err: any) {
-      lastError = err;
-      const errMsg = err.message || String(err);
-      const isTransient = 
-        errMsg.includes("502") || 
-        errMsg.includes("503") || 
-        errMsg.includes("504") ||
-        errMsg.includes("SERVER_ERROR") ||
-        errMsg.includes("HttpServerError") ||
-        errMsg.includes("socket hang up") ||
-        errMsg.includes("ETIMEDOUT") ||
-        errMsg.includes("ECONNRESET");
-
-      if (isTransient && attempt < maxRetries) {
-        const nextDelay = initialDelay * Math.pow(1.5, attempt - 1);
-        console.warn(`[Database Retry] Transient DB error (attempt ${attempt}/${maxRetries}): ${errMsg}. Retrying in ${Math.round(nextDelay)}ms...`);
-        await new Promise(resolve => setTimeout(resolve, nextDelay));
-      } else {
-        throw err;
-      }
-    }
-  }
-  throw lastError;
-}
-
-// Transparent lazy evaluation proxy matching the original SQL executive API
-export const db = {
-  execute(stmt: any): Promise<any> {
-    return executeWithRetry<any>(() => getDbClient().execute(stmt));
-  },
-  batch(stmts: any[], mode?: any): Promise<any> {
-    return executeWithRetry<any>(() => getDbClient().batch(stmts, mode));
-  }
-};
+console.log(`Connecting to Turso Database via: ${dbUrl}`);
+const db = createClient({
+  url: dbUrl,
+  authToken: dbAuthToken,
+});
 
 // Configure base middleware
 app.use(express.json({ limit: "50mb" }));
@@ -346,155 +260,23 @@ async function initDb() {
     console.log("Turso Database initialized perfectly!");
   } catch (err) {
     console.error("Failed to initialize database tables/seeds:", err);
-    throw err; // Rethrow so caller knows initialization failed
   }
 }
 
 // Database initialization called sequentially in startServer below
 
-// Cache for Db initialization state
-let dbInitialized = false;
-let initPromise: Promise<void> | null = null;
-
-async function ensureDb() {
-  if (dbInitialized) return;
-  if (!initPromise) {
-    initPromise = initDb()
-      .then(() => {
-        dbInitialized = true;
-      })
-      .catch((err) => {
-        initPromise = null; // allow retry
-        throw err;
-      });
-  }
-  await initPromise;
-}
-
-// Middeware to guarantee DB initialization before executing DB routes
-app.use(async (req, res, next) => {
-  // Only require DB initialization for operations that actually read or write database content (pull or push)
-  // This allows the configuration (/db/configure) and status (/db/status) endpoints to load unblocked even if the DB is misconfigured
-  if (req.path.includes("/db/pull") || req.path.includes("/db/push")) {
-    try {
-      await ensureDb();
-    } catch (err: any) {
-      console.error("Database initialization failed on request stream:", err);
-      return res.status(500).json({ error: "Failed to initialize remote database: " + err.message });
-    }
-  }
-  next();
-});
-
 // --- API ROUTES ---
 
-// Diagnostic endpoint to check Turso cloud connection status
-app.get(["/api/db/status", "/db/status"], (req, res) => {
-  let maskedUrl = "Unconfigured (Pending Connection)";
-  let isRemote = false;
-  
-  if (dbUrl && dbUrl !== "file::memory:" && dbUrl !== "file:local.db") {
-    isRemote = true;
-    if (dbUrl.startsWith("libsql://")) {
-      const parts = dbUrl.replace("libsql://", "").split(".");
-      const firstPart = parts[0] ? (parts[0].length > 6 ? parts[0].substring(0, 3) + "***" + parts[0].slice(-3) : "***") : "***";
-      maskedUrl = `libsql://${firstPart}.${parts.slice(1).join(".")}`;
-    } else {
-      maskedUrl = dbUrl.substring(0, 10) + "..." + dbUrl.slice(-5);
-    }
-  }
-  
-  res.json({
-    connectionType: "Turso Cloud Database",
-    databaseUrl: maskedUrl,
-    isRemote,
-  });
-});
-
-// Endpoint to dynamically configure Turso database at runtime (cloud sync)
-app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
-  const { databaseUrl, authToken } = req.body;
-  if (!databaseUrl) {
-    return res.status(400).json({ error: "TURSO_DATABASE_URL is required." });
-  }
-
+// 1. Unified pull endpoint to load all state at startup
+app.get("/api/db/pull", async (req, res) => {
   try {
-    console.log(`Dynamically connecting to Turso Database: ${databaseUrl}`);
-    const client = createClient({
-      url: databaseUrl,
-      authToken: authToken || undefined,
-    });
-
-    // Verify connection by running a query
-    await client.execute("SELECT 1");
-
-    // Clear db initialized flags of our server
-    dbInitialized = false;
-    initPromise = null;
-
-    // Apply the active references
-    dbClientInstance = client;
-    dbUrl = databaseUrl;
-    dbAuthToken = authToken || undefined;
-
-    // Save to turso-config.json so it persists across container/server cold-starts
-    try {
-      fs.writeFileSync(
-        configFilePath,
-        JSON.stringify({ databaseUrl, authToken }, null, 2),
-        "utf8"
-      );
-      console.log("[Turso Config] Saved db configuration to turso-config.json");
-    } catch (saveErr) {
-      console.error("[Turso Config] Failed saving config file:", saveErr);
-    }
-
-    // Initialize/migrate the newly connected Turso database tables if needed
-    await ensureDb();
-
-    let maskedUrl = databaseUrl;
-    if (databaseUrl.startsWith("libsql://")) {
-      const parts = databaseUrl.replace("libsql://", "").split(".");
-      const firstPart = parts[0] ? (parts[0].length > 6 ? parts[0].substring(0, 3) + "***" + parts[0].slice(-2) : "***") : "***";
-      maskedUrl = `libsql://${firstPart}.${parts.slice(1).join(".")}`;
-    }
-
-    res.json({
-      success: true,
-      message: "Successfully connected to cloud Turso database and initialized tables!",
-      connectionType: "Turso Cloud Database",
-      databaseUrl: maskedUrl,
-      isRemote: true
-    });
-  } catch (err: any) {
-    console.error("Failed to dynamically configure Turso cloud database:", err);
-    res.status(400).json({ error: "Failed to connect to the database: " + err.message });
-  }
-});
-
-// 1. Unified pull endpoint to load all state at startup (supports both Vercel stripped and standard paths)
-app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
-  const currentDbUrl = dbUrl || "file:local.db";
-  console.log(`[DB Pull Proxy] Pull requested. Loading dataset from Turso Database at: ${currentDbUrl}`);
-
-  try {
-    const [
-      usersRes,
-      productsRes,
-      customersRes,
-      ordersRes,
-      deliveriesRes,
-      complaintsRes,
-      auditLogsRes
-    ] = await Promise.all([
-      db.execute("SELECT * FROM users"),
-      db.execute("SELECT * FROM products"),
-      db.execute("SELECT * FROM customers"),
-      db.execute("SELECT * FROM orders"),
-      db.execute("SELECT * FROM deliveries"),
-      db.execute("SELECT * FROM complaints"),
-      db.execute("SELECT * FROM audit_logs")
-    ]);
+    const usersRes = await db.execute("SELECT * FROM users");
+    const productsRes = await db.execute("SELECT * FROM products");
+    const customersRes = await db.execute("SELECT * FROM customers");
+    const ordersRes = await db.execute("SELECT * FROM orders");
+    const deliveriesRes = await db.execute("SELECT * FROM deliveries");
+    const complaintsRes = await db.execute("SELECT * FROM complaints");
+    const auditLogsRes = await db.execute("SELECT * FROM audit_logs");
 
     // Format results correctly
     const users = usersRes.rows;
@@ -506,14 +288,10 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
       let parsedItems = [];
       try {
         if (row.items) {
-          if (typeof row.items === "string") {
-            parsedItems = JSON.parse(row.items);
-          } else if (Array.isArray(row.items)) {
-            parsedItems = row.items;
-          }
+          parsedItems = JSON.parse(row.items);
         }
-      } catch (e: any) {
-        console.error(`[DB Pull Proxy] Failed parsing items JSON for order ${row.orderId || "unknown"}:`, e.message || e);
+      } catch (e) {
+        console.error(`Failed parsing items for order ${row.orderId}`, e);
       }
       return {
         ...row,
@@ -525,203 +303,116 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     const complaints = complaintsRes.rows;
     const auditLogs = auditLogsRes.rows;
 
-    console.log(`[DB Pull Proxy] Load successful. Row counts: users=${users.length}, products=${products.length}, customers=${customers.length}, orders=${orders.length}, deliveries=${deliveries.length}, complaints=${complaints.length}, auditLogs=${auditLogs.length}`);
-
-    let maskedUrl = "Unconfigured (Pending Connection)";
-    let isRemote = false;
-    
-    if (dbUrl && dbUrl !== "file::memory:" && dbUrl !== "file:local.db") {
-       isRemote = true;
-       if (dbUrl.startsWith("libsql://")) {
-         const parts = dbUrl.replace("libsql://", "").split(".");
-         const firstPart = parts[0] ? (parts[0].length > 6 ? parts[0].substring(0, 3) + "***" + parts[0].slice(-3) : "***") : "***";
-         maskedUrl = `libsql://${firstPart}.${parts.slice(1).join(".")}`;
-       } else {
-         maskedUrl = dbUrl.substring(0, 10) + "..." + dbUrl.slice(-5);
-       }
-     }
- 
-     res.json({
-       success: true,
-       connectionType: "Turso Cloud Database",
-       databaseUrl: maskedUrl,
-       isRemote,
-       data: {
-         users,
-         products,
-         customers,
-         orders,
-         deliveries,
-         complaints,
-         auditLogs,
-       },
-     });
-   } catch (error: any) {
-     console.error(`[DB Pull Proxy] Critical database pull failure (URL: ${currentDbUrl}):`, error);
-     res.status(500).json({ 
-       error: error.message || "Failed to pull database data",
-       details: error.stack || "" 
-     });
-   }
+    res.json({
+      success: true,
+      data: {
+        users,
+        products,
+        customers,
+        orders,
+        deliveries,
+        complaints,
+        auditLogs,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error pulling database state:", error);
+    res.status(500).json({ error: error.message || "Failed to pull database data" });
+  }
 });
 
-// 2. Incremental or batch push endpoint to sync table data (supports both Vercel stripped and standard paths)
-app.post(["/api/db/push", "/db/push"], async (req, res) => {
+// 2. Incremental or batch push endpoint to sync table data
+app.post("/api/db/push", async (req, res) => {
   const { table, rows } = req.body;
-  const currentDbUrl = dbUrl || "file:local.db";
-  
   if (!table || !Array.isArray(rows)) {
-    console.error("[DB Push Proxy] Payload rejected: missing table name or rows array.");
     return res.status(400).json({ error: "Invalid payload. Table name and rows array required." });
   }
-
-  console.log(`[DB Push Proxy] Queuing sync write batch for table "${table}" (${rows.length} rows) to DB: ${currentDbUrl}`);
 
   try {
     const statements: any[] = [];
 
     if (table === "users") {
-      statements.push({ sql: "DELETE FROM users", args: [] });
+      statements.push("DELETE FROM users");
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO users (userId, username, name, role, status) VALUES (?, ?, ?, ?, ?)",
-          args: [
-            row.userId, 
-            row.username ?? null, 
-            row.name ?? null, 
-            row.role ?? null, 
-            row.status ?? null
-          ],
+          args: [row.userId, row.username, row.name, row.role, row.status],
         });
       }
     } else if (table === "products") {
-      statements.push({ sql: "DELETE FROM products", args: [] });
+      statements.push("DELETE FROM products");
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO products (productId, productName, category, unitPrice, stockQuantity, reorderThreshold) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [
-            row.productId, 
-            row.productName ?? null, 
-            row.category ?? null, 
-            row.unitPrice ?? null, 
-            row.stockQuantity ?? null, 
-            row.reorderThreshold ?? null
-          ],
+          args: [row.productId, row.productName, row.category, row.unitPrice, row.stockQuantity, row.reorderThreshold],
         });
       }
     } else if (table === "customers") {
-      statements.push({ sql: "DELETE FROM customers", args: [] });
+      statements.push("DELETE FROM customers");
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO customers (customerId, customerName, contact, address, email, tin) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [
-            row.customerId, 
-            row.customerName ?? null, 
-            row.contact ?? null, 
-            row.address ?? null, 
-            row.email ?? null, 
-            row.tin ?? null
-          ],
+          args: [row.customerId, row.customerName, row.contact, row.address, row.email, row.tin],
         });
       }
     } else if (table === "orders") {
-      statements.push({ sql: "DELETE FROM orders", args: [] });
+      statements.push("DELETE FROM orders");
       for (const row of rows) {
-        // Safe stringify check to guarantee no double encoding or corrupt parsing
-        let orderItemsStr = "[]";
-        if (row.items) {
-          if (typeof row.items === "string") {
-            orderItemsStr = row.items;
-          } else if (Array.isArray(row.items)) {
-            orderItemsStr = JSON.stringify(row.items);
-          }
-        }
-
         statements.push({
           sql: "INSERT INTO orders (orderId, orderRefNo, customerId, orderDate, status, paymentStatus, totalAmount, dueDate, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           args: [
             row.orderId,
-            row.orderRefNo ?? null,
-            row.customerId ?? null,
-            row.orderDate ?? null,
-            row.status ?? null,
-            row.paymentStatus ?? null,
-            row.totalAmount ?? null,
-            row.dueDate ?? null,
-            orderItemsStr,
+            row.orderRefNo,
+            row.customerId,
+            row.orderDate,
+            row.status,
+            row.paymentStatus,
+            row.totalAmount,
+            row.dueDate,
+            JSON.stringify(row.items || []),
           ],
         });
       }
     } else if (table === "deliveries") {
-      statements.push({ sql: "DELETE FROM deliveries", args: [] });
+      statements.push("DELETE FROM deliveries");
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO deliveries (deliveryId, orderId, scheduledDate, deliveryDate, status, assignedDriver) VALUES (?, ?, ?, ?, ?, ?)",
-          args: [
-            row.deliveryId, 
-            row.orderId ?? null, 
-            row.scheduledDate ?? null, 
-            row.deliveryDate ?? null, 
-            row.status ?? null, 
-            row.assignedDriver ?? null
-          ],
+          args: [row.deliveryId, row.orderId, row.scheduledDate, row.deliveryDate, row.status, row.assignedDriver],
         });
       }
     } else if (table === "complaints") {
-      statements.push({ sql: "DELETE FROM complaints", args: [] });
+      statements.push("DELETE FROM complaints");
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO complaints (complaintId, customerId, productId, description, status, resolution, dateLogged) VALUES (?, ?, ?, ?, ?, ?, ?)",
-          args: [
-            row.complaintId, 
-            row.customerId ?? null, 
-            row.productId ?? null, 
-            row.description ?? null, 
-            row.status ?? null, 
-            row.resolution ?? null, 
-            row.dateLogged ?? null
-          ],
+          args: [row.complaintId, row.customerId, row.productId, row.description, row.status, row.resolution, row.dateLogged],
         });
       }
     } else if (table === "audit_logs") {
-      statements.push({ sql: "DELETE FROM audit_logs", args: [] });
+      statements.push("DELETE FROM audit_logs");
       for (const row of rows) {
         statements.push({
           sql: "INSERT INTO audit_logs (logId, username, action, timestamp, tableRef) VALUES (?, ?, ?, ?, ?)",
-          args: [
-            row.logId, 
-            row.username ?? null, 
-            row.action ?? null, 
-            row.timestamp ?? null, 
-            row.tableRef ?? null
-          ],
+          args: [row.logId, row.username, row.action, row.timestamp, row.tableRef],
         });
       }
     } else {
-      console.warn(`[DB Push Proxy] Unknown table request blocked: "${table}"`);
-      return res.status(400).json({ error: `Unknown table name: "${table}"` });
+      return res.status(400).json({ error: "Unknown table name." });
     }
 
     if (statements.length > 0) {
-      console.log(`[DB Push Proxy] Calling db.batch with ${statements.length} sql statements for table "${table}"...`);
       await db.batch(statements, "write");
-      console.log(`[DB Push Proxy] Batch completed successfully! Table "${table}" has been fully replaced in cloud Turso.`);
-    } else {
-      console.log(`[DB Push Proxy] Empty rows array, completed zero-operation for table "${table}".`);
     }
-
-    res.json({ success: true, table, rowsProcessedCount: rows.length });
+    res.json({ success: true });
   } catch (error: any) {
-    console.error(`[DB Push Proxy] Critical batch push sync exception for table "${table}":`, error);
-    res.status(500).json({ 
-      error: error.message || `Failed to push sync data to table: ${table}`,
-      details: error.stack || ""
-    });
+    console.error(`Error executing push sync batch for table: ${table}`, error);
+    res.status(500).json({ error: error.message || `Failed to push sync data to table: ${table}` });
   }
 });
 
-// 3. Clear and Reset DB default endpoint (supports both Vercel stripped and standard paths)
-app.post(["/api/db/reset", "/db/reset"], async (req, res) => {
+// 3. Clear and Reset DB default endpoint
+app.post("/api/db/reset", async (req, res) => {
   try {
     await db.batch([
       "DROP TABLE IF EXISTS users",
