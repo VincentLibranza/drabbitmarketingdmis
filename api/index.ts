@@ -4,40 +4,31 @@ import { createClient } from "@libsql/client";
 const app = express();
 app.use(express.json({ limit: "50mb" }));
 
+// 1. GET CREDENTIALS
 const url = (process.env.TURSO_DATABASE_URL || "").trim().replace(/['"]/g, '');
 const token = (process.env.TURSO_AUTH_TOKEN || "").trim().replace(/['"]/g, '');
 const client = createClient({ url: url || "", authToken: token });
 
-// Schema setup using ERD names
-async function initSchema() {
-  if (!url) return;
-  const sqls = [
-    `CREATE TABLE IF NOT EXISTS users (UserID TEXT PRIMARY KEY, Username TEXT, Password TEXT, Role TEXT, Status TEXT)`,
-    `CREATE TABLE IF NOT EXISTS products (ProdID TEXT PRIMARY KEY, ProdName TEXT, Category TEXT, UnitPrice REAL, StockQty INTEGER, MinLevel INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS customers (CustID TEXT PRIMARY KEY, CustName TEXT, Contact TEXT, Address TEXT, Email TEXT)`,
-    `CREATE TABLE IF NOT EXISTS orders (OrdID TEXT PRIMARY KEY, OrdRefNo TEXT, CustID TEXT, OrdDate TEXT, Status TEXT, UserID TEXT)`,
-    `CREATE TABLE IF NOT EXISTS order_items (ItemID TEXT PRIMARY KEY, OrdID TEXT, ProdID TEXT, Quantity INTEGER, UnitPrice REAL)`,
-    `CREATE TABLE IF NOT EXISTS invoices (InvID TEXT PRIMARY KEY, OrdID TEXT, InvDate TEXT, TotalAmt REAL, PayStatus TEXT)`,
-    `CREATE TABLE IF NOT EXISTS deliveries (DelID TEXT PRIMARY KEY, OrdID TEXT, SchDate TEXT, DelDate TEXT, Status TEXT)`,
-    `CREATE TABLE IF NOT EXISTS complaints (ComplID TEXT PRIMARY KEY, CustID TEXT, Description TEXT, Status TEXT, Resolution TEXT)`,
-    `CREATE TABLE IF NOT EXISTS audit_logs (LogID TEXT PRIMARY KEY, UserID TEXT, Action TEXT, Timestamp TEXT, TableRef TEXT)`
-  ];
-  for (const s of sqls) await client.execute(s);
-}
+// 2. CONNECTION STATUS (This is what controls the banner)
+app.get("/api/db/status", (req, res) => {
+  res.json({ 
+    isRemote: !!url && url.startsWith("libsql"), 
+    databaseUrl: url 
+  });
+});
 
+// 3. UNIVERSAL PULL (Gets all 9 tables from ERD)
 app.get("/api/db/pull", async (req, res) => {
   try {
-    await initSchema();
     const tables = ['users', 'products', 'customers', 'orders', 'order_items', 'invoices', 'deliveries', 'complaints', 'audit_logs'];
+    const results = await Promise.all(tables.map(t => client.execute(`SELECT * FROM ${t}`).catch(() => ({ rows: [] }))));
     const data: any = {};
-    for (const t of tables) {
-      const r = await client.execute(`SELECT * FROM ${t}`);
-      data[t] = r.rows;
-    }
+    tables.forEach((name, i) => { data[name] = results[i].rows; });
     res.json({ success: true, data });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
+// 4. UNIVERSAL PUSH (Saves browser data to Cloud automatically)
 app.post("/api/db/push", async (req, res) => {
   const { table, rows } = req.body;
   try {
