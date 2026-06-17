@@ -112,9 +112,6 @@ export class LocalDB {
   }
 
   static async syncToTurso(table: string, rows: any[]): Promise<void> {
-    const mode = localStorage.getItem("dmis_db_mode") || "local";
-    if (mode !== "turso") return;
-
     try {
       const response = await fetch("/api/db/push", {
         method: "POST",
@@ -127,10 +124,10 @@ export class LocalDB {
         const errorJson = await response.json().catch(() => ({}));
         console.error(`[Turso Sync] Failed to sync table ${table}:`, errorJson.error || response.statusText);
       } else {
-        console.log(`[Turso Sync] Background synced ${rows.length} rows to Turso table: ${table}`);
+        console.log(`[Turso Sync] Synced ${rows.length} rows to Turso cloud table: ${table}`);
       }
     } catch (err) {
-      console.warn(`[Turso Sync] Background database write failed for ${table}:`, err);
+      console.warn(`[Turso Sync] Cloud database write failed for ${table}:`, err);
     }
   }
 
