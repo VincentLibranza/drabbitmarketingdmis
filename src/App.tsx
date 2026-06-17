@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+// FIXED IMPORT NAME
+import { motion, AnimatePresence } from "motion/react"; 
 import { 
   Globe, WifiOff, LogOut, LayoutDashboard, ShoppingBag, Package, 
   Users, Truck, AlertTriangle, Terminal, FolderLock, ChevronRight,
-  Database, RefreshCw, FileJson, Download, Upload, ShieldCheck
+  Settings, Download, Upload, Clock
 } from "lucide-react";
 import { LocalDB } from "./services/db";
 import { UserRole } from "./types";
@@ -24,7 +25,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [dbStatus, setDbStatus] = useState<any>(null);
 
-  // States for all views
+  // States for all views - Initialized with empty arrays to prevent crashes
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -33,12 +34,16 @@ export default function App() {
   const [auditLogs, setAuditLogs] = useState([]);
 
   const refreshData = () => {
-    setProducts(LocalDB.getProducts());
-    setCustomers(LocalDB.getCustomers());
-    setOrders(LocalDB.getOrders());
-    setDeliveries(LocalDB.getDeliveries());
-    setComplaints(LocalDB.getComplaints());
-    setAuditLogs(LocalDB.getAuditLogs());
+    try {
+      setProducts(LocalDB.getProducts() || []);
+      setCustomers(LocalDB.getCustomers() || []);
+      setOrders(LocalDB.getOrders() || []);
+      setDeliveries(LocalDB.getDeliveries() || []);
+      setComplaints(LocalDB.getComplaints() || []);
+      setAuditLogs(LocalDB.getAuditLogs() || []);
+    } catch (e) {
+      console.error("Failed to refresh data:", e);
+    }
   };
 
   useEffect(() => {
@@ -53,14 +58,21 @@ export default function App() {
       .catch(() => setDbStatus({ isRemote: false }));
 
     const saved = localStorage.getItem("dmis_logged_in_user");
-    if (saved) setCurrentUser(JSON.parse(saved));
+    if (saved) {
+        try {
+            setCurrentUser(JSON.parse(saved));
+        } catch (e) {
+            localStorage.removeItem("dmis_logged_in_user");
+        }
+    }
   }, []);
 
+  // Show login if no user
   if (!currentUser) return (
     <LoginScreen onLoginSuccess={(u) => { 
       setCurrentUser(u); 
       localStorage.setItem("dmis_logged_in_user", JSON.stringify(u)); 
-      LocalDB.appendLog(u.username, "User Access Granted", "USER");
+      LocalDB.appendLog(u.username || "System", "User Access Granted", "USER");
       refreshData(); 
     }} />
   );
@@ -77,12 +89,12 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans selection:bg-indigo-100">
-      {/* Turso Cloud Status Banner */}
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      {/* Cloud Status Banner */}
       {dbStatus && (
-        <div className={`text-[10px] py-1 px-4 font-bold text-center uppercase tracking-widest text-white flex justify-center items-center gap-2 transition-colors ${dbStatus.isRemote ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+        <div className={`text-[10px] py-1 px-4 font-bold text-center uppercase tracking-widest text-white flex justify-center items-center gap-2 ${dbStatus.isRemote ? 'bg-emerald-600' : 'bg-rose-600'}`}>
           {dbStatus.isRemote ? <Globe className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-          {dbStatus.isRemote ? "Live Turso Cloud Sync Active" : "Offline Reactive Mode - Storage Local"}
+          {dbStatus.isRemote ? "Live Turso Cloud Sync Active" : "Offline Storage Mode"}
         </div>
       )}
 
@@ -98,14 +110,14 @@ export default function App() {
         
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <p className="text-xs font-bold text-slate-900">{currentUser.name}</p>
+            <p className="text-xs font-bold text-slate-900">{currentUser?.name || "User"}</p>
             <span className="inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 mt-1">
-              {currentUser.role === UserRole.Proprietor ? "Proprietor Account" : "Staff Account"}
+              Account Verified
             </span>
           </div>
           <button 
             onClick={() => { setCurrentUser(null); localStorage.removeItem("dmis_logged_in_user"); }} 
-            className="text-xs font-bold text-slate-500 hover:text-rose-600 flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-rose-50 transition-all border border-transparent hover:border-rose-100"
+            className="text-xs font-bold text-slate-500 hover:text-rose-600 flex items-center gap-2 px-4 py-2 rounded-xl hover:bg-rose-50 transition-all"
           >
             <LogOut className="w-4 h-4" /> Sign Out
           </button>
@@ -116,71 +128,56 @@ export default function App() {
         {/* Sidebar */}
         <aside className="w-72 shrink-0 space-y-6">
           <div className="bg-white border border-slate-100 rounded-[2rem] p-5 shadow-xl shadow-slate-200/50">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] px-4 block mb-5">Business Intelligence Modules</span>
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] px-4 block mb-5">Business Intelligence</span>
             <nav className="space-y-1">
               {menuItems.map(item => {
                  const Icon = item.icon;
-                 if (item.restricted && currentUser.role !== UserRole.Proprietor) return null;
+                 // Safe role check
+                 if (item.restricted && currentUser?.role !== "Proprietor") return null;
                  return (
                    <button 
                      key={item.id} 
                      onClick={() => setActiveTab(item.id)} 
                      className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-xs font-bold transition-all ${
                        activeTab === item.id 
-                       ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 translate-x-2' 
-                       : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                       ? 'bg-indigo-600 text-white shadow-lg translate-x-2' 
+                       : 'text-slate-500 hover:bg-slate-50'
                      }`}
                    >
                      <div className="flex items-center gap-3">
-                       <Icon className={`w-5 h-5 ${activeTab === item.id ? 'text-white' : 'text-slate-400'}`} /> 
+                       <Icon className="w-5 h-5" /> 
                        {item.label}
                      </div>
-                     <ChevronRight className={`w-4 h-4 transition-transform ${activeTab === item.id ? 'rotate-90 opacity-100' : 'opacity-0'}`} />
+                     <ChevronRight className={`w-4 h-4 ${activeTab === item.id ? 'rotate-90' : 'opacity-0'}`} />
                    </button>
                  );
               })}
             </nav>
           </div>
 
-          {/* Restored SAD Development Control Panel */}
+          {/* SAD Development Control */}
           <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xl shadow-slate-200/50">
             <div className="flex items-center gap-2 mb-4">
               <Settings className="w-4 h-4 text-slate-900" />
-              <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">SAD Development Control</span>
+              <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">SAD Control</span>
             </div>
-            <p className="text-[11px] text-slate-500 leading-relaxed mb-5 font-medium">
-              This system implements a fully reactive offline local database. Your modifications persist dynamically inside browser localStorage.
-            </p>
             <button 
-              onClick={() => { if(window.confirm("Restore baseline seeds?")) { LocalDB.reset(); }}}
-              className="w-full py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-100 transition-all mb-4"
+              onClick={() => { if(window.confirm("Reset all data?")) { LocalDB.reset(); }}}
+              className="w-full py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-indigo-50"
             >
-              Restore Baseline Spec Seeds
+              Restore Baseline Seeds
             </button>
-            
-            <div className="space-y-2">
-              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Backup & Migrations</p>
-              <div className="grid grid-cols-2 gap-2">
-                <button className="flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-100 rounded-lg text-[9px] font-black text-slate-600 hover:bg-slate-50">
-                  <Download className="w-3 h-3" /> Export JSON
-                </button>
-                <button className="flex items-center justify-center gap-2 py-2.5 bg-white border border-slate-100 rounded-lg text-[9px] font-black text-slate-600 hover:bg-slate-50">
-                  <Upload className="w-3 h-3" /> Import JSON
-                </button>
-              </div>
-            </div>
           </div>
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-2xl shadow-slate-200/40 min-h-[800px] relative overflow-hidden">
+        <main className="flex-1 bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-2xl min-h-[800px] relative overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div 
               key={activeTab} 
               initial={{ opacity: 0, x: 20 }} 
               animate={{ opacity: 1, x: 0 }} 
               exit={{ opacity: 0, x: -20 }} 
-              transition={{ duration: 0.3, ease: "easeOut" }}
               className="h-full"
             >
                {activeTab === "Dashboard" && <DashboardView products={products} orders={orders} currentUser={currentUser} onRefreshData={refreshData} complaints={complaints} />}
@@ -190,28 +187,11 @@ export default function App() {
                {activeTab === "Deliveries" && <DeliveryView deliveries={deliveries} orders={orders} customers={customers} currentUser={currentUser} onRefreshData={refreshData} />}
                {activeTab === "Complaints" && <ComplaintsView complaints={complaints} customers={customers} products={products} currentUser={currentUser} onRefreshData={refreshData} />}
                {activeTab === "Audit" && <AuditView logs={auditLogs} onRefreshData={refreshData} />}
+               {activeTab === "Users" && <UserManagementView users={[]} currentUser={currentUser} onRefreshData={refreshData} />}
             </motion.div>
           </AnimatePresence>
         </main>
       </div>
-
-      {/* Full Professional Footer */}
-      <footer className="bg-white border-t border-slate-100 py-10 mt-auto">
-        <div className="max-w-7xl mx-auto px-8 text-center">
-          <h3 className="text-slate-900 font-black text-xs uppercase tracking-[0.3em] mb-3">Drabbit Marketing System (DMIS)</h3>
-          <p className="text-slate-400 text-[10px] font-medium max-w-2xl mx-auto leading-relaxed mb-6">
-            Authorized for university system review. Davao Sasa distribution channels. All transactional activities 
-            are audited in accordance with SAD guidelines.
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-x-8 gap-y-2 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            <span>Prepared by Team Honda ADV</span>
-            <span className="h-1 w-1 bg-slate-200 rounded-full" />
-            <span>Mapua Malayan Colleges Mindanao</span>
-            <span className="h-1 w-1 bg-slate-200 rounded-full" />
-            <span>CS103P S.A.D. Program</span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
