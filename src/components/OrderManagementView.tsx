@@ -25,7 +25,7 @@ import {
   Download
 } from "lucide-react";
 import { Order, OrderStatus, PaymentStatus, Product, Customer, OrderItem } from "../types";
-import { LocalDB } from "../services/db";
+import { LocalDB } from "../db";
 import { jsPDF } from "jspdf";
 
 interface OrderManagementViewProps {

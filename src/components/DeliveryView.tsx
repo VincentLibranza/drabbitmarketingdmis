@@ -19,7 +19,7 @@ import {
   FileCheck
 } from "lucide-react";
 import { Delivery, DeliveryStatus, Order, Customer } from "../types";
-import { LocalDB } from "../services/db";
+import { LocalDB } from "../db";
 
 interface DeliveryViewProps {
   deliveries: Delivery[];

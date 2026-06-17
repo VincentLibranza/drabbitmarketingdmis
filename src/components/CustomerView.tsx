@@ -19,7 +19,7 @@ import {
   Briefcase 
 } from "lucide-react";
 import { Customer } from "../types";
-import { LocalDB } from "../services/db";
+import { LocalDB } from "../db";
 
 interface CustomerViewProps {
   customers: Customer[];

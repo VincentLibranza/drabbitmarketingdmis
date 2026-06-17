@@ -16,7 +16,7 @@ import {
   RefreshCw 
 } from "lucide-react";
 import { AuditLog } from "../types";
-import { LocalDB } from "../services/db";
+import { LocalDB } from "../db";
 
 interface AuditViewProps {
   logs: AuditLog[];

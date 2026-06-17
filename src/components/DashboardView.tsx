@@ -44,7 +44,7 @@ import {
   DeliveryStatus, 
   ComplaintStatus 
 } from "../types";
-import { LocalDB } from "../services/db";
+import { LocalDB } from "../db";
 
 interface DashboardViewProps {
   products: Product[];

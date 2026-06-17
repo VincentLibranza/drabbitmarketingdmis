@@ -407,7 +407,6 @@ app.get(["/api/db/status", "/db/status"], (req, res) => {
   res.json({
     connectionType: "Turso Cloud Database",
     databaseUrl: maskedUrl,
-    rawDatabaseUrl: isRemote ? dbUrl : "",
     isRemote,
   });
 });
@@ -475,27 +474,14 @@ app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
 
 // 1. Unified pull endpoint to load all state at startup (supports both Vercel stripped and standard paths)
 app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
-  const currentDbUrl = dbUrl || "file:local.db";
-  console.log(`[DB Pull Proxy] Pull requested. Loading dataset from Turso Database at: ${currentDbUrl}`);
-
   try {
-    const [
-      usersRes,
-      productsRes,
-      customersRes,
-      ordersRes,
-      deliveriesRes,
-      complaintsRes,
-      auditLogsRes
-    ] = await Promise.all([
-      db.execute("SELECT * FROM users"),
-      db.execute("SELECT * FROM products"),
-      db.execute("SELECT * FROM customers"),
-      db.execute("SELECT * FROM orders"),
-      db.execute("SELECT * FROM deliveries"),
-      db.execute("SELECT * FROM complaints"),
-      db.execute("SELECT * FROM audit_logs")
-    ]);
+    const usersRes = await db.execute("SELECT * FROM users");
+    const productsRes = await db.execute("SELECT * FROM products");
+    const customersRes = await db.execute("SELECT * FROM customers");
+    const ordersRes = await db.execute("SELECT * FROM orders");
+    const deliveriesRes = await db.execute("SELECT * FROM deliveries");
+    const complaintsRes = await db.execute("SELECT * FROM complaints");
+    const auditLogsRes = await db.execute("SELECT * FROM audit_logs");
 
     // Format results correctly
     const users = usersRes.rows;
@@ -507,14 +493,10 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
       let parsedItems = [];
       try {
         if (row.items) {
-          if (typeof row.items === "string") {
-            parsedItems = JSON.parse(row.items);
-          } else if (Array.isArray(row.items)) {
-            parsedItems = row.items;
-          }
+          parsedItems = JSON.parse(row.items);
         }
-      } catch (e: any) {
-        console.error(`[DB Pull Proxy] Failed parsing items JSON for order ${row.orderId || "unknown"}:`, e.message || e);
+      } catch (e) {
+        console.error(`Failed parsing items for order ${row.orderId}`, e);
       }
       return {
         ...row,
@@ -525,8 +507,6 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     const deliveries = deliveriesRes.rows;
     const complaints = complaintsRes.rows;
     const auditLogs = auditLogsRes.rows;
-
-    console.log(`[DB Pull Proxy] Load successful. Row counts: users=${users.length}, products=${products.length}, customers=${customers.length}, orders=${orders.length}, deliveries=${deliveries.length}, complaints=${complaints.length}, auditLogs=${auditLogs.length}`);
 
     let maskedUrl = "Unconfigured (Pending Connection)";
     let isRemote = false;
@@ -547,36 +527,28 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
        connectionType: "Turso Cloud Database",
        databaseUrl: maskedUrl,
        isRemote,
-       data: {
-         users,
-         products,
-         customers,
-         orders,
-         deliveries,
-         complaints,
-         auditLogs,
-       },
-     });
-   } catch (error: any) {
-     console.error(`[DB Pull Proxy] Critical database pull failure (URL: ${currentDbUrl}):`, error);
-     res.status(500).json({ 
-       error: error.message || "Failed to pull database data",
-       details: error.stack || "" 
-     });
-   }
+      data: {
+        users,
+        products,
+        customers,
+        orders,
+        deliveries,
+        complaints,
+        auditLogs,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error pulling database state:", error);
+    res.status(500).json({ error: error.message || "Failed to pull database data" });
+  }
 });
 
 // 2. Incremental or batch push endpoint to sync table data (supports both Vercel stripped and standard paths)
 app.post(["/api/db/push", "/db/push"], async (req, res) => {
   const { table, rows } = req.body;
-  const currentDbUrl = dbUrl || "file:local.db";
-  
   if (!table || !Array.isArray(rows)) {
-    console.error("[DB Push Proxy] Payload rejected: missing table name or rows array.");
     return res.status(400).json({ error: "Invalid payload. Table name and rows array required." });
   }
-
-  console.log(`[DB Push Proxy] Queuing sync write batch for table "${table}" (${rows.length} rows) to DB: ${currentDbUrl}`);
 
   try {
     const statements: any[] = [];
@@ -628,16 +600,6 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
     } else if (table === "orders") {
       statements.push({ sql: "DELETE FROM orders", args: [] });
       for (const row of rows) {
-        // Safe stringify check to guarantee no double encoding or corrupt parsing
-        let orderItemsStr = "[]";
-        if (row.items) {
-          if (typeof row.items === "string") {
-            orderItemsStr = row.items;
-          } else if (Array.isArray(row.items)) {
-            orderItemsStr = JSON.stringify(row.items);
-          }
-        }
-
         statements.push({
           sql: "INSERT INTO orders (orderId, orderRefNo, customerId, orderDate, status, paymentStatus, totalAmount, dueDate, items) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           args: [
@@ -649,7 +611,7 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
             row.paymentStatus ?? null,
             row.totalAmount ?? null,
             row.dueDate ?? null,
-            orderItemsStr,
+            JSON.stringify(row.items || []),
           ],
         });
       }
@@ -699,25 +661,16 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         });
       }
     } else {
-      console.warn(`[DB Push Proxy] Unknown table request blocked: "${table}"`);
-      return res.status(400).json({ error: `Unknown table name: "${table}"` });
+      return res.status(400).json({ error: "Unknown table name." });
     }
 
     if (statements.length > 0) {
-      console.log(`[DB Push Proxy] Calling db.batch with ${statements.length} sql statements for table "${table}"...`);
       await db.batch(statements, "write");
-      console.log(`[DB Push Proxy] Batch completed successfully! Table "${table}" has been fully replaced in cloud Turso.`);
-    } else {
-      console.log(`[DB Push Proxy] Empty rows array, completed zero-operation for table "${table}".`);
     }
-
-    res.json({ success: true, table, rowsProcessedCount: rows.length });
+    res.json({ success: true });
   } catch (error: any) {
-    console.error(`[DB Push Proxy] Critical batch push sync exception for table "${table}":`, error);
-    res.status(500).json({ 
-      error: error.message || `Failed to push sync data to table: ${table}`,
-      details: error.stack || ""
-    });
+    console.error(`Error executing push sync batch for table: ${table}`, error);
+    res.status(500).json({ error: error.message || `Failed to push sync data to table: ${table}` });
   }
 });
 
