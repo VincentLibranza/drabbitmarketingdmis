@@ -61,13 +61,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         status: UserStatus.Active
       };
 
+      // Save locally and trigger background sync
       LocalDB.setUsers([...allUsers, newUser]);
       LocalDB.appendLog(newUser.username, "New account registered successfully", "USER");
 
-      setTimeout(() => {
-        setLoading(false);
-        onLoginSuccess(newUser);
-      }, 1000);
+      // FIX: Removed the 1000ms setTimeout to make account creation instant
+      onLoginSuccess(newUser);
 
     } else {
       const userMatched = allUsers.find(
@@ -207,6 +206,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                 </span>
                 <div className="grid grid-cols-2 gap-4">
                   <button
+                    type="button"
                     onClick={() => handleQuickSelect("admin")}
                     className="flex flex-col items-center justify-center p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-100 transition-all group cursor-pointer"
                   >
@@ -216,6 +216,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   </button>
 
                   <button
+                    type="button"
                     onClick={() => handleQuickSelect("staff")}
                     className="flex flex-col items-center justify-center p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-teal-50 hover:border-teal-100 transition-all group cursor-pointer"
                   >
