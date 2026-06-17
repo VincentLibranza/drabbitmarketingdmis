@@ -103,8 +103,33 @@ export class LocalDB {
   static set<T>(key: string, data: T): void {
     try {
       localStorage.setItem(`dmis_${key}`, JSON.stringify(data));
+      if (Array.isArray(data)) {
+        this.syncToTurso(key, data);
+      }
     } catch (e) {
       console.error("Failed saving state: ", e);
+    }
+  }
+
+  static async syncToTurso(table: string, rows: any[]): Promise<void> {
+    const mode = localStorage.getItem("dmis_db_mode") || "local";
+    if (mode !== "turso") return;
+
+    try {
+      const response = await fetch("/api/db/push", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ table, rows }),
+      });
+      if (!response.ok) {
+        console.error(`[Turso Sync] Failed to sync table ${table}:`, response.statusText);
+      } else {
+        console.log(`[Turso Sync] Background synced ${rows.length} rows to Turso table: ${table}`);
+      }
+    } catch (err) {
+      console.warn(`[Turso Sync] Background database write failed for ${table}:`, err);
     }
   }
 

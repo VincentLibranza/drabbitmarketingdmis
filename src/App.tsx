@@ -56,6 +56,20 @@ export default function App() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
+  // Database connection engine states
+  const [dbMode, setDbMode] = useState<"local" | "turso">(() => {
+    const saved = localStorage.getItem("dmis_db_mode");
+    return (saved as "local" | "turso") || "local";
+  });
+  const [syncLoading, setSyncLoading] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  
+  // Turso status & configuration states
+  const [dbStatus, setDbStatus] = useState<{ connectionType: string; databaseUrl: string; isRemote: boolean } | null>(null);
+  const [configDbUrl, setConfigDbUrl] = useState("");
+  const [configAuthToken, setConfigAuthToken] = useState("");
+  const [showConfigForm, setShowConfigForm] = useState(false);
+
   // Function to pull latest state from LocalDB
   const refreshData = () => {
     setUsers(LocalDB.getUsers());
@@ -67,10 +81,161 @@ export default function App() {
     setAuditLogs(LocalDB.getAuditLogs());
   };
 
+  const fetchDbStatus = async () => {
+    try {
+      const res = await fetch("/api/db/status");
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data);
+        if (data.databaseUrl && data.databaseUrl !== "Unconfigured (Pending Connection)") {
+          setConfigDbUrl(data.databaseUrl);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed fetching Turso connection status:", e);
+    }
+  };
+
+  const handleManualPull = async (silent = false) => {
+    setSyncLoading(true);
+    setSyncStatus("Downloading Turso cloud snapshot...");
+    try {
+      const res = await fetch("/api/db/pull");
+      if (!res.ok) throw new Error("Server pull endpoint returned failure");
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
+        if (users && users.length > 0) LocalDB.setUsers(users);
+        if (products && products.length > 0) LocalDB.setProducts(products);
+        if (customers && customers.length > 0) LocalDB.setCustomers(customers);
+        if (orders && orders.length > 0) LocalDB.setOrders(orders);
+        if (deliveries && deliveries.length > 0) LocalDB.setDeliveries(deliveries);
+        if (complaints && complaints.length > 0) LocalDB.setComplaints(complaints);
+        if (auditLogs && auditLogs.length > 0) LocalDB.setAuditLogs(auditLogs);
+        
+        refreshData();
+        if (!silent) {
+          alert("All live Turso cloud database datasets successfully pooled down into local storage!");
+        }
+      } else {
+        throw new Error(json.error || "Malformed pull response");
+      }
+    } catch (err: any) {
+      if (!silent) {
+        alert(`Failed to pull Turso datasets: ${err.message || err}. Tip: Ensure you have configured a valid TURSO_DATABASE_URL/token via server-environment or the settings panel.`);
+      } else {
+        console.warn("Silent initial Turso pull failed:", err);
+      }
+    } finally {
+      setSyncLoading(false);
+      setSyncStatus(null);
+    }
+  };
+
+  const handleManualUpload = async () => {
+    if (!confirm("UPLOAD your current browser offline database up into your remote Turso instance? This will overwrite remote records to match your browser exactly!")) {
+      return;
+    }
+    setSyncLoading(true);
+    setSyncStatus("Syncing local dataset to Turso...");
+    try {
+      const tables = [
+        { name: "users", data: LocalDB.getUsers() },
+        { name: "products", data: LocalDB.getProducts() },
+        { name: "customers", data: LocalDB.getCustomers() },
+        { name: "orders", data: LocalDB.getOrders() },
+        { name: "deliveries", data: LocalDB.getDeliveries() },
+        { name: "complaints", data: LocalDB.getComplaints() },
+        { name: "audit_logs", data: LocalDB.getAuditLogs() },
+      ];
+      for (const t of tables) {
+        const response = await fetch("/api/db/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ table: t.name, rows: t.data })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Push failed for table ${t.name}`);
+        }
+      }
+      alert("All local database records successfully uploaded to Turso cloud SQL database!");
+    } catch (err: any) {
+      alert(`Manual upload failed. Turso error: ${err.message || err}`);
+    } finally {
+      setSyncLoading(false);
+      setSyncStatus(null);
+    }
+  };
+
+  const handleToggleDbMode = async (mode: "local" | "turso") => {
+    setDbMode(mode);
+    localStorage.setItem("dmis_db_mode", mode);
+    if (currentUser) {
+      LocalDB.appendLog(
+        currentUser.username,
+        `Switched database mode to ${mode === "turso" ? "Turso Cloud Sync Mode" : "Local Offline Sandbox"}.`,
+        "SYSTEM"
+      );
+    }
+    
+    if (mode === "turso") {
+      if (confirm("Switched to Turso Cloud Mode! Would you like to automatically pull and sync active Turso database tables down into your browser now? If you just connected a new schema, this is highly recommended.")) {
+        await handleManualPull(true);
+      } else {
+        refreshData();
+      }
+    } else {
+      refreshData();
+      alert("Switched to Local Offline Database! All edits are saved instantly inside browser local storage, bypassing LibSQL server-side proxies.");
+    }
+  };
+
+  const handleConfigureDb = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!configDbUrl.trim()) {
+      alert("Please provide a Turso database URL.");
+      return;
+    }
+    setSyncLoading(true);
+    setSyncStatus("Connecting and initializing Turso database...");
+    try {
+      const response = await fetch("/api/db/configure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          databaseUrl: configDbUrl.trim(),
+          authToken: configAuthToken.trim() || undefined
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed registration");
+      }
+      alert("Successfully connected backend SQLite proxy to live cloud Turso instance and deployed schemas!");
+      await fetchDbStatus();
+      setShowConfigForm(false);
+      if (dbMode === "turso") {
+        await handleManualPull(true);
+      }
+    } catch (err: any) {
+      alert(`Database config failed: ${err.message || err}`);
+    } finally {
+      setSyncLoading(false);
+      setSyncStatus(null);
+    }
+  };
+
   // Sync state on boot
   useEffect(() => {
     // Initial display of cached localized data
     refreshData();
+
+    // Auto-pull from Turso if active on boot
+    const savedMode = localStorage.getItem("dmis_db_mode");
+    if (savedMode === "turso") {
+      handleManualPull(true);
+    }
     
     // Automatically retrieve previous session if active in localStorage
     const savedUser = localStorage.getItem("dmis_logged_in_user");
@@ -83,6 +248,11 @@ export default function App() {
       }
     }
   }, []);
+
+  // Fetch connection status when toggle fires
+  useEffect(() => {
+    fetchDbStatus();
+  }, [dbMode]);
 
   // Secure Sign-in handler
   const handleLoginSuccess = (user: User) => {
@@ -268,8 +438,127 @@ export default function App() {
               <span>SAD Development Control</span>
             </div>
             <p className="leading-relaxed text-slate-400">
-              This system implements a fully reactive offline local database. Your modifications persist dynamically inside browser localStorage with 100% reliability.
+              This system implements a fully reactive dual-engine database workspace with Turso or browser localStorage.
             </p>
+
+            {/* Database Engine Switcher for Turso */}
+            <div className="pt-2 border-t border-slate-100 space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Database Engine</span>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
+                  dbMode === "local" ? "bg-emerald-50 text-emerald-800 border border-emerald-100" : "bg-blue-50 text-blue-800 border border-blue-100"
+                }`}>
+                  {dbMode === "local" ? "offline local" : "turso cloud"}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleToggleDbMode("local")}
+                  className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
+                    dbMode === "local" ? 
+                    "bg-emerald-600 border-emerald-600 text-white shadow-sm" : 
+                    "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                  title="Save instantly to browser storage. 100% reliable offline mode."
+                >
+                  Offline Local
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleDbMode("turso")}
+                  className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
+                    dbMode === "turso" ? 
+                    "bg-blue-600 border-blue-600 text-white shadow-sm" : 
+                    "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}
+                  title="Sync seamlessly with cloud Turso Database."
+                >
+                  Turso Cloud
+                </button>
+              </div>
+
+              {/* Active Connection Status Badge */}
+              {dbStatus && (
+                <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 mt-2 space-y-2 text-[10px]">
+                  <div className="flex justify-between items-center gap-1.5">
+                    <span className="font-semibold text-slate-700">Connection Status:</span>
+                    <span className={`text-[9px] font-bold ${dbStatus.isRemote ? "text-blue-600" : "text-amber-600"}`}>
+                      {dbStatus.isRemote ? "LIVE CLOUD" : "LOCAL SQL MEMORY"}
+                    </span>
+                  </div>
+                  <div className="text-[9px] text-slate-500 truncate" title={dbStatus.databaseUrl}>
+                    <span className="font-semibold">URL:</span> {dbStatus.databaseUrl}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    <button
+                      onClick={handleManualUpload}
+                      disabled={syncLoading}
+                      className="bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-750 hover:border-blue-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
+                      title="Force upload browser local data into Turso"
+                    >
+                      Push Cloud
+                    </button>
+                    <button
+                      onClick={() => handleManualPull(false)}
+                      disabled={syncLoading}
+                      className="bg-white border border-slate-200 hover:bg-amber-50 hover:text-amber-750 hover:border-amber-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
+                      title="Pull datasets from Turso into browser storage"
+                    >
+                      Pull Cloud
+                    </button>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-slate-200/50 flex justify-between items-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowConfigForm(!showConfigForm)}
+                      className="text-indigo-650 hover:text-indigo-800 font-bold transition-colors cursor-pointer text-[9px]"
+                    >
+                      {showConfigForm ? "Close Form ✕" : "Config Connection ⚙️"}
+                    </button>
+                    {syncStatus && (
+                      <span className="text-[8px] text-indigo-600 font-semibold animate-pulse">{syncStatus}</span>
+                    )}
+                  </div>
+
+                  {showConfigForm && (
+                    <form onSubmit={handleConfigureDb} className="pt-2 border-t border-slate-200 space-y-2 mt-1">
+                      <div className="space-y-0.5">
+                        <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Turso Database URL</label>
+                        <input
+                          type="text"
+                          value={configDbUrl}
+                          onChange={(e) => setConfigDbUrl(e.target.value)}
+                          placeholder="libsql://your-db-name.turso.io"
+                          className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Auth Token</label>
+                        <input
+                          type="password"
+                          value={configAuthToken}
+                          onChange={(e) => setConfigAuthToken(e.target.value)}
+                          placeholder="Turso Authorization Token"
+                          className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={syncLoading}
+                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 rounded text-[9px] cursor-pointer"
+                      >
+                        Apply & Initialize
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+            </div>
             
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <button
@@ -380,6 +669,61 @@ export default function App() {
                 </div>
 
                   <div className="pt-6 border-t border-slate-100 space-y-3 text-xs">
+                    {/* Database Engine Switcher for Mobile */}
+                    <div className="space-y-2 border-b border-slate-100 pb-3">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="font-bold text-slate-400 uppercase tracking-wide">Database Mode</span>
+                        <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[9px] ${
+                          dbMode === "local" ? "bg-emerald-50 text-emerald-800 border border-emerald-100" : "bg-blue-50 text-blue-800 border border-blue-100"
+                        }`}>
+                          {dbMode === "local" ? "offline local" : "turso cloud"}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDbMode("local")}
+                          className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
+                            dbMode === "local" ? "bg-emerald-600 border-emerald-600 text-white font-bold" : "bg-slate-50 border-slate-200 text-slate-600"
+                          }`}
+                        >
+                          Offline Local
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleDbMode("turso")}
+                          className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
+                            dbMode === "turso" ? "bg-blue-600 border-blue-600 text-white font-bold" : "bg-slate-50 border-slate-200 text-slate-600"
+                          }`}
+                        >
+                          Turso Cloud
+                        </button>
+                      </div>
+
+                      {dbMode === "turso" && (
+                        <div className="grid grid-cols-2 gap-1.5 pt-1">
+                          <button
+                            onClick={() => {
+                              handleManualUpload();
+                              setMobileMenuOpen(false);
+                            }}
+                            className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-705 text-[10px] cursor-pointer"
+                          >
+                            Push Cloud
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleManualPull();
+                              setMobileMenuOpen(false);
+                            }}
+                            className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-750 text-[10px] cursor-pointer"
+                          >
+                            Pull Cloud
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       onClick={() => {
                         handleResetDatabase();
