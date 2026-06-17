@@ -18,8 +18,6 @@ import {
   ComplaintStatus,
   AuditLog
 } from "./types";
-import { db, auth } from "./firebase";
-import { doc, getDocs, collection, writeBatch, deleteDoc } from "firebase/firestore";
 
 // Seed Users
 const initialUsers: User[] = [
@@ -206,123 +204,12 @@ export class LocalDB {
     }
   }
 
-  static async syncArrayToFirestore(collName: string, localItems: any[], idKey: string) {
-    const dbMode = typeof window !== "undefined" ? localStorage.getItem("dmis_db_mode") : "local";
-    if (dbMode !== "cloud") {
-      // In local offline mode, completely skip automatic background Firestore updates to ensure top performance
-      return;
-    }
-    try {
-      const batch = writeBatch(db);
-      for (const item of localItems) {
-        if (item && item[idKey]) {
-          const docRef = doc(db, collName, item[idKey]);
-          batch.set(docRef, item);
-        }
-      }
-      await batch.commit();
-
-      const snapshot = await getDocs(collection(db, collName));
-      const localIds = new Set(localItems.map(x => x[idKey]));
-      const deleteBatch = writeBatch(db);
-      let needsDelete = false;
-      snapshot.forEach(docSnap => {
-        if (!localIds.has(docSnap.id)) {
-          deleteBatch.delete(docSnap.ref);
-          needsDelete = true;
-        }
-      });
-      if (needsDelete) {
-        await deleteBatch.commit();
-      }
-      console.log(`[Firestore Sync] Successfully synced and pruned remote collection: ${collName}`);
-    } catch (e) {
-      console.warn(`[Firestore Sync] Background database write failed for ${collName}:`, e);
-    }
-  }
-
-  static async forceSyncAllToCloud(): Promise<boolean> {
-    try {
-      console.log("[LocalDB] Forcing complete cloud upload of local storage...");
-      await this.syncArrayToFirestoreForce("users", this.getUsers(), "userId");
-      await this.syncArrayToFirestoreForce("products", this.getProducts(), "productId");
-      await this.syncArrayToFirestoreForce("customers", this.getCustomers(), "customerId");
-      await this.syncArrayToFirestoreForce("orders", this.getOrders(), "orderId");
-      await this.syncArrayToFirestoreForce("deliveries", this.getDeliveries(), "deliveryId");
-      await this.syncArrayToFirestoreForce("complaints", this.getComplaints(), "complaintId");
-      await this.syncArrayToFirestoreForce("audit_logs", this.getAuditLogs(), "logId");
-      this.appendLog("System", "Uploaded all local offline database arrays to Firestore.", "SYSTEM");
-      return true;
-    } catch (e) {
-      console.error("[LocalDB] Force sync upload failed:", e);
-      throw e;
-    }
-  }
-
-  static async forcePullAllFromCloud(): Promise<boolean> {
-    try {
-      console.log("[LocalDB] Forcing complete cloud pull to local storage...");
-      const collections = [
-        { name: "users", setter: (items: any) => this.set("users", items) },
-        { name: "products", setter: (items: any) => this.set("products", items) },
-        { name: "customers", setter: (items: any) => this.set("customers", items) },
-        { name: "orders", setter: (items: any) => this.set("orders", items) },
-        { name: "deliveries", setter: (items: any) => this.set("deliveries", items) },
-        { name: "complaints", setter: (items: any) => this.set("complaints", items) },
-        { name: "audit_logs", setter: (items: any) => this.set("audit_logs", items) },
-      ];
-
-      for (const col of collections) {
-        const snapshot = await getDocs(collection(db, col.name));
-        const cloudItems: any[] = [];
-        snapshot.forEach(docSnap => {
-          cloudItems.push(docSnap.data());
-        });
-        if (cloudItems.length > 0) {
-          col.setter(cloudItems);
-        }
-      }
-      this.appendLog("System", "Downloaded and merged cloud database schemas into local storage.", "SYSTEM");
-      return true;
-    } catch (e) {
-      console.error("[LocalDB] Direct cloud pull failed:", e);
-      throw e;
-    }
-  }
-
-  private static async syncArrayToFirestoreForce(collName: string, localItems: any[], idKey: string) {
-    const batch = writeBatch(db);
-    for (const item of localItems) {
-      if (item && item[idKey]) {
-        const docRef = doc(db, collName, item[idKey]);
-        batch.set(docRef, item);
-      }
-    }
-    await batch.commit();
-
-    const snapshot = await getDocs(collection(db, collName));
-    const localIds = new Set(localItems.map(x => x[idKey]));
-    const deleteBatch = writeBatch(db);
-    let needsDelete = false;
-    snapshot.forEach(docSnap => {
-      if (!localIds.has(docSnap.id)) {
-        deleteBatch.delete(docSnap.ref);
-        needsDelete = true;
-      }
-    });
-    if (needsDelete) {
-      await deleteBatch.commit();
-    }
-    console.log(`[Firestore Sync Force] Successfully uploaded schema: ${collName}`);
-  }
-
-  // Typed getters/setters fully integrated into browser localStorage & Cloud Firestore
+  // Typed getters/setters fully integrated into browser localStorage
   static getUsers(): User[] {
     return this.get<User[]>("users", initialUsers);
   }
   static setUsers(users: User[]): void {
     this.set("users", users);
-    this.syncArrayToFirestore("users", users, "userId");
   }
 
   static getProducts(): Product[] {
@@ -330,7 +217,6 @@ export class LocalDB {
   }
   static setProducts(products: Product[]): void {
     this.set("products", products);
-    this.syncArrayToFirestore("products", products, "productId");
   }
 
   static getCustomers(): Customer[] {
@@ -338,7 +224,6 @@ export class LocalDB {
   }
   static setCustomers(customers: Customer[]): void {
     this.set("customers", customers);
-    this.syncArrayToFirestore("customers", customers, "customerId");
   }
 
   static getOrders(): Order[] {
@@ -346,7 +231,6 @@ export class LocalDB {
   }
   static setOrders(orders: Order[]): void {
     this.set("orders", orders);
-    this.syncArrayToFirestore("orders", orders, "orderId");
   }
 
   static getDeliveries(): Delivery[] {
@@ -354,7 +238,6 @@ export class LocalDB {
   }
   static setDeliveries(deliveries: Delivery[]): void {
     this.set("deliveries", deliveries);
-    this.syncArrayToFirestore("deliveries", deliveries, "deliveryId");
   }
 
   static getComplaints(): Complaint[] {
@@ -362,7 +245,6 @@ export class LocalDB {
   }
   static setComplaints(complaints: Complaint[]): void {
     this.set("complaints", complaints);
-    this.syncArrayToFirestore("complaints", complaints, "complaintId");
   }
 
   static getAuditLogs(): AuditLog[] {
@@ -370,7 +252,6 @@ export class LocalDB {
   }
   static setAuditLogs(logs: AuditLog[]): void {
     this.set("audit_logs", logs);
-    this.syncArrayToFirestore("audit_logs", logs, "logId");
   }
 
   static appendLog(username: string, action: string, tableRef: string): void {

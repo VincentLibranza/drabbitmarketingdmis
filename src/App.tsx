@@ -22,7 +22,6 @@ import {
   ChevronRight,
   Menu,
   X,
-  Database,
   Upload,
   Download,
   Undo2
@@ -30,9 +29,6 @@ import {
 
 import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
 import { LocalDB } from "./db";
-import { db, auth, handleFirestoreError, OperationType } from "./firebase";
-import { collection, onSnapshot } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
 
 // Core views
 import LoginScreen from "./components/LoginScreen";
@@ -51,8 +47,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [firebaseAuthUser, setFirebaseAuthUser] = useState<any>(null);
-
   // Synchronized state pools
   const [users, setUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -61,14 +55,6 @@ export default function App() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-
-  // Database connection engine states
-  const [dbMode, setDbMode] = useState<"local" | "cloud">(() => {
-    const saved = localStorage.getItem("dmis_db_mode");
-    return (saved as "local" | "cloud") || "local";
-  });
-  const [syncLoading, setSyncLoading] = useState<boolean>(false);
-  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   // Function to pull latest state from LocalDB
   const refreshData = () => {
@@ -79,60 +65,6 @@ export default function App() {
     setDeliveries(LocalDB.getDeliveries());
     setComplaints(LocalDB.getComplaints());
     setAuditLogs(LocalDB.getAuditLogs());
-  };
-
-  const handleToggleDbMode = (mode: "local" | "cloud") => {
-    setDbMode(mode);
-    localStorage.setItem("dmis_db_mode", mode);
-    if (currentUser) {
-      LocalDB.appendLog(
-        currentUser.username,
-        `Switched database mode to ${mode === "cloud" ? "Firebase Cloud Sync" : "Local Offline Sandbox"}.`,
-        "SYSTEM"
-      );
-    }
-    refreshData();
-    if (mode === "cloud") {
-      alert("Switched to Firebase Cloud Sync. Updates will sync automatically with Firestore in the background when connected! If Firestore was empty, you should click 'Upload local to cloud' to seed it.");
-    } else {
-      alert("Switched to Local Offline Database! 100% of your data edits are saved instantly inside browser local storage, bypassing any Firebase limits successfully.");
-    }
-  };
-
-  const handleManualUpload = async () => {
-    if (!confirm("UPLOAD your current offline browser database up into Firebase Cloud Firestore? This resets remote records to match your browser exactly!")) {
-      return;
-    }
-    setSyncLoading(true);
-    setSyncStatus("Uploading local dataset to cloud...");
-    try {
-      await LocalDB.forceSyncAllToCloud();
-      refreshData();
-      alert("All local database records successfully uploaded to Firestore!");
-    } catch (err: any) {
-      alert(`Manual upload failed. Firebase error: ${err.message || err}`);
-    } finally {
-      setSyncLoading(false);
-      setSyncStatus(null);
-    }
-  };
-
-  const handleManualPull = async () => {
-    if (!confirm("PULL and overwrite your local browser database with Firebase Cloud store entries? WARNING: This overwrites your local offline records!")) {
-      return;
-    }
-    setSyncLoading(true);
-    setSyncStatus("Downloading cloud dataset...");
-    try {
-      await LocalDB.forcePullAllFromCloud();
-      refreshData();
-      alert("Cloud database successfully pulled into local browser storage!");
-    } catch (err: any) {
-      alert(`Manual download failed. Firebase error: ${err.message || err}`);
-    } finally {
-      setSyncLoading(false);
-      setSyncStatus(null);
-    }
   };
 
   // Sync state on boot
@@ -151,75 +83,6 @@ export default function App() {
       }
     }
   }, []);
-
-  // Monitor Firebase Auth changes to prevent pre-auth listing failures
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log("[Firestore Sync] Authenticated session is ready:", user.uid);
-        setFirebaseAuthUser(user);
-      } else {
-        setFirebaseAuthUser(null);
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  // Bind real-time cloud listeners to sync other devices' updates automatically (ONLY in cloud mode)
-  useEffect(() => {
-    if (dbMode !== "cloud") return;
-    if (!firebaseAuthUser) return;
-
-    const collectionsToSync = [
-      { name: "users", idKey: "userId" },
-      { name: "products", idKey: "productId" },
-      { name: "customers", idKey: "customerId" },
-      { name: "orders", idKey: "orderId" },
-      { name: "deliveries", idKey: "deliveryId" },
-      { name: "complaints", idKey: "complaintId" },
-      { name: "audit_logs", idKey: "logId" },
-    ];
-
-    const unsubscribers = collectionsToSync.map((coll) => {
-      const collRef = collection(db, coll.name);
-      return onSnapshot(
-        collRef,
-        (snapshot) => {
-          const cloudItems: any[] = [];
-          snapshot.forEach((docSnap) => {
-            cloudItems.push(docSnap.data());
-          });
-
-          // Match local items with cloud items
-          const localItems = LocalDB.get(coll.name, []);
-          
-          // Match strings to verify real edits (independent of insertion orders)
-          const localSorted = [...localItems].sort((a: any, b: any) => String(a[coll.idKey]).localeCompare(String(b[coll.idKey])));
-          const cloudSorted = [...cloudItems].sort((a: any, b: any) => String(a[coll.idKey]).localeCompare(String(b[coll.idKey])));
-          const localStr = JSON.stringify(localSorted);
-          const cloudStr = JSON.stringify(cloudSorted);
-
-          if (cloudItems.length === 0 && localItems.length > 0) {
-            // Seed the empty cloud with whatever localItems exist!
-            console.log(`[Firestore Sync] Cloud collection ${coll.name} is empty. Seeding local dataset to cloud...`);
-            LocalDB.syncArrayToFirestore(coll.name, localItems, coll.idKey);
-          } else if (localStr !== cloudStr) {
-            console.log(`[Firestore Sync] Remote update received for ${coll.name}, synchronizing state...`);
-            LocalDB.set(coll.name, cloudItems);
-            // Refresh Active View States
-            refreshData();
-          }
-        },
-        (error) => {
-          handleFirestoreError(error, OperationType.LIST, coll.name);
-        }
-      );
-    });
-
-    return () => {
-      unsubscribers.forEach((unsub) => unsub());
-    };
-  }, [firebaseAuthUser, dbMode]);
 
   // Secure Sign-in handler
   const handleLoginSuccess = (user: User) => {
@@ -405,82 +268,8 @@ export default function App() {
               <span>SAD Development Control</span>
             </div>
             <p className="leading-relaxed text-slate-400">
-              This system implements a fully reactive dual-mode engine. Your modifications persist dynamically with 100% safety.
+              This system implements a fully reactive offline local database. Your modifications persist dynamically inside browser localStorage with 100% reliability.
             </p>
-
-            {/* Database Engine Switcher */}
-            <div className="pt-2 border-t border-slate-100 space-y-2">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Database Engine</span>
-                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase ${
-                  dbMode === "local" ? "bg-emerald-50 text-emerald-800 border border-emerald-100" : "bg-blue-50 text-blue-850 border border-blue-100"
-                }`}>
-                  {dbMode === "local" ? "offline local" : "live cloud"}
-                </span>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleToggleDbMode("local")}
-                  className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                    dbMode === "local" ? 
-                    "bg-emerald-600 border-emerald-600 text-white shadow-sm" : 
-                    "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                  title="Save instantly to browser storage. 100% reliable offline mode."
-                >
-                  Offline Local
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleToggleDbMode("cloud")}
-                  className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                    dbMode === "cloud" ? 
-                    "bg-blue-600 border-blue-600 text-white shadow-sm" : 
-                    "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                  title="Enable cloud sync with Firebase database."
-                >
-                  Firebase Cloud
-                </button>
-              </div>
-
-              {dbMode === "cloud" && (
-                <div className="space-y-1.5 bg-slate-50 border border-slate-100 rounded-xl p-2.5 mt-2 text-[10px]">
-                  <div className="flex items-center gap-1.5 font-semibold text-slate-700">
-                    <Database className="w-3.5 h-3.5 text-blue-500 animate-pulse" />
-                    <span>Firestore Sync Tools</span>
-                  </div>
-                  <p className="text-[9px] text-slate-400 leading-normal">
-                    Manually push your offline states or pull remote data schemas to resolve syncing lag.
-                  </p>
-                  <div className="grid grid-cols-2 gap-1.5 pt-1">
-                    <button
-                      onClick={handleManualUpload}
-                      disabled={syncLoading}
-                      className="bg-white border border-slate-200 hover:bg-blue-55 hover:text-blue-700 hover:border-blue-100 py-1.5 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-700 text-[10px]"
-                      title="Force upload current local data arrays into Firebase"
-                    >
-                      Upload Cloud
-                    </button>
-                    <button
-                      onClick={handleManualPull}
-                      disabled={syncLoading}
-                      className="bg-white border border-slate-200 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-100 py-1.5 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-700 text-[10px]"
-                      title="Force download datasets from Firebase"
-                    >
-                      Pull Cloud
-                    </button>
-                  </div>
-                  {syncStatus && (
-                    <div className="text-[8px] text-blue-600 font-semibold animate-pulse text-center mt-1">
-                      {syncStatus}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
             
             <div className="space-y-2 pt-2 border-t border-slate-100">
               <button
@@ -591,63 +380,6 @@ export default function App() {
                 </div>
 
                   <div className="pt-6 border-t border-slate-100 space-y-3 text-xs">
-                    {/* Database Engine Switcher for Mobile */}
-                    <div className="space-y-2 border-b border-slate-100 pb-3">
-                      <div className="flex justify-between items-center text-[11px]">
-                        <span className="font-bold text-slate-400 uppercase tracking-wide">Database Mode</span>
-                        <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[9px] ${
-                          dbMode === "local" ? "bg-emerald-50 text-emerald-800 border border-emerald-100" : "bg-blue-50 text-blue-800 border border-blue-100"
-                        }`}>
-                          {dbMode === "local" ? "offline local" : "live cloud"}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDbMode("local")}
-                          className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                            dbMode === "local" ? "bg-emerald-600 border-emerald-600 text-white" : "bg-slate-50 border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          Offline Local
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleDbMode("cloud")}
-                          className={`py-1.5 px-2 rounded-lg text-center font-bold text-[10px] transition-all cursor-pointer border ${
-                            dbMode === "cloud" ? "bg-blue-600 border-blue-600 text-white" : "bg-slate-50 border-slate-200 text-slate-600"
-                          }`}
-                        >
-                          Firebase Cloud
-                        </button>
-                      </div>
-
-                      {dbMode === "cloud" && (
-                        <div className="space-y-1.5 bg-slate-50 border border-slate-100 rounded-xl p-2.5 mt-2">
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <button
-                              onClick={() => {
-                                handleManualUpload();
-                                setMobileMenuOpen(false);
-                              }}
-                              className="bg-white border border-slate-200 py-1 px-1 rounded-lg font-bold text-center text-slate-700 text-[10px]"
-                            >
-                              Upload Cloud
-                            </button>
-                            <button
-                              onClick={() => {
-                                handleManualPull();
-                                setMobileMenuOpen(false);
-                              }}
-                              className="bg-white border border-slate-200 py-1 px-1 rounded-lg font-bold text-center text-slate-700 text-[10px]"
-                            >
-                              Pull Cloud
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
                     <button
                       onClick={() => {
                         handleResetDatabase();
