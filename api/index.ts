@@ -8,10 +8,10 @@ const url = (process.env.TURSO_DATABASE_URL || "").trim().replace(/['"]/g, '');
 const token = (process.env.TURSO_AUTH_TOKEN || "").trim().replace(/['"]/g, '');
 const client = createClient({ url: url || "", authToken: token });
 
-// --- SCHEMA INITIALIZATION (Matches your ERD exactly) ---
+// Schema setup using ERD names
 async function initSchema() {
   if (!url) return;
-  const tables = [
+  const sqls = [
     `CREATE TABLE IF NOT EXISTS users (UserID TEXT PRIMARY KEY, Username TEXT, Password TEXT, Role TEXT, Status TEXT)`,
     `CREATE TABLE IF NOT EXISTS products (ProdID TEXT PRIMARY KEY, ProdName TEXT, Category TEXT, UnitPrice REAL, StockQty INTEGER, MinLevel INTEGER)`,
     `CREATE TABLE IF NOT EXISTS customers (CustID TEXT PRIMARY KEY, CustName TEXT, Contact TEXT, Address TEXT, Email TEXT)`,
@@ -22,28 +22,22 @@ async function initSchema() {
     `CREATE TABLE IF NOT EXISTS complaints (ComplID TEXT PRIMARY KEY, CustID TEXT, Description TEXT, Status TEXT, Resolution TEXT)`,
     `CREATE TABLE IF NOT EXISTS audit_logs (LogID TEXT PRIMARY KEY, UserID TEXT, Action TEXT, Timestamp TEXT, TableRef TEXT)`
   ];
-  for (const sql of tables) await client.execute(sql);
+  for (const s of sqls) await client.execute(s);
 }
 
-// Check Status
-app.get("/api/db/status", (req, res) => {
-  res.json({ isRemote: !!url && url.startsWith("libsql"), databaseUrl: url });
-});
-
-// PULL: Gets all 9 tables for the browser
 app.get("/api/db/pull", async (req, res) => {
   try {
     await initSchema();
     const tables = ['users', 'products', 'customers', 'orders', 'order_items', 'invoices', 'deliveries', 'complaints', 'audit_logs'];
-    const results = await Promise.all(tables.map(t => client.execute(`SELECT * FROM ${t}`)));
-    
     const data: any = {};
-    tables.forEach((name, i) => { data[name] = results[i].rows; });
+    for (const t of tables) {
+      const r = await client.execute(`SELECT * FROM ${t}`);
+      data[t] = r.rows;
+    }
     res.json({ success: true, data });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// PUSH: Saves any table from browser to cloud
 app.post("/api/db/push", async (req, res) => {
   const { table, rows } = req.body;
   try {
