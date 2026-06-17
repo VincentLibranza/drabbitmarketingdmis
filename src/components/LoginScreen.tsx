@@ -7,7 +7,7 @@ import React, { useState } from "react";
 import { motion } from "motion/react";
 import { ShieldAlert, LogIn, Sparkles, AlertCircle } from "lucide-react";
 import { User, UserRole } from "../types";
-import { LocalDB } from "../db";
+import { LocalDB } from "../services/db";
 
 interface LoginScreenProps {
   onLoginSuccess: (user: User) => void;

@@ -21,11 +21,14 @@ import {
   FolderLock,
   ChevronRight,
   Menu,
-  X
+  X,
+  Upload,
+  Download,
+  Undo2
 } from "lucide-react";
 
 import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
-import { LocalDB } from "./db";
+import { LocalDB } from "./services/db";
 
 // Core views
 import LoginScreen from "./components/LoginScreen";
@@ -44,7 +47,6 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>("Dashboard");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
   // Synchronized state pools
   const [users, setUsers] = useState<User[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -53,6 +55,37 @@ export default function App() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+
+  // Database connection engine states
+  const [syncLoading, setSyncLoading] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
+  
+  // Turso status & configuration states
+  const [dbStatus, setDbStatus] = useState<{ connectionType: string; databaseUrl: string; isRemote: boolean } | null>(null);
+  const [configDbUrl, setConfigDbUrl] = useState("");
+  const [configAuthToken, setConfigAuthToken] = useState("");
+  const [showConfigForm, setShowConfigForm] = useState(false);
+
+  // Real-time background sync state log
+  const [backgroundSyncs, setBackgroundSyncs] = useState<
+    Record<string, { status: "syncing" | "success" | "error"; error?: string; count: number; timestamp: Date }>
+  >({});
+
+  useEffect(() => {
+    const handleSyncEvent = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { table, status, error, count, timestamp } = customEvent.detail;
+      setBackgroundSyncs((prev) => ({
+        ...prev,
+        [table]: { status, error, count, timestamp }
+      }));
+    };
+
+    window.addEventListener("dmis-sync-status", handleSyncEvent);
+    return () => {
+      window.removeEventListener("dmis-sync-status", handleSyncEvent);
+    };
+  }, []);
 
   // Function to pull latest state from LocalDB
   const refreshData = () => {
@@ -65,21 +98,137 @@ export default function App() {
     setAuditLogs(LocalDB.getAuditLogs());
   };
 
+  const fetchDbStatus = async () => {
+    try {
+      const res = await fetch("/api/db/status");
+      if (res.ok) {
+        const data = await res.json();
+        setDbStatus(data);
+        if (data.rawDatabaseUrl) {
+          setConfigDbUrl(data.rawDatabaseUrl);
+        } else if (data.databaseUrl && data.databaseUrl !== "Unconfigured (Pending Connection)" && !data.databaseUrl.includes("***")) {
+          setConfigDbUrl(data.databaseUrl);
+        }
+      }
+    } catch (e) {
+      console.warn("Failed fetching Turso connection status:", e);
+    }
+  };
+
+  const handleManualPull = async (silent = false) => {
+    setSyncLoading(true);
+    setSyncStatus("Downloading Turso cloud snapshot...");
+    try {
+      const res = await fetch("/api/db/pull");
+      if (!res.ok) throw new Error("Server pull endpoint returned failure");
+      const json = await res.json();
+      if (json.success && json.data) {
+        const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
+        if (users) LocalDB.setUsers(users, true);
+        if (products) LocalDB.setProducts(products, true);
+        if (customers) LocalDB.setCustomers(customers, true);
+        if (orders) LocalDB.setOrders(orders, true);
+        if (deliveries) LocalDB.setDeliveries(deliveries, true);
+        if (complaints) LocalDB.setComplaints(complaints, true);
+        if (auditLogs) LocalDB.setAuditLogs(auditLogs, true);
+        
+        refreshData();
+        if (!silent) {
+          alert("All live Turso cloud database datasets successfully pooled down into local storage!");
+        }
+      } else {
+        throw new Error(json.error || "Malformed pull response");
+      }
+    } catch (err: any) {
+      if (!silent) {
+        alert(`Failed to pull Turso datasets: ${err.message || err}. Tip: Ensure you have configured a valid TURSO_DATABASE_URL/token via server-environment or the settings panel.`);
+      } else {
+        console.warn("Silent initial Turso pull failed:", err);
+      }
+    } finally {
+      setSyncLoading(false);
+      setSyncStatus(null);
+    }
+  };
+
+  const handleManualUpload = async () => {
+    if (!confirm("UPLOAD your current browser offline database up into your remote Turso instance? This will overwrite remote records to match your browser exactly!")) {
+      return;
+    }
+    setSyncLoading(true);
+    setSyncStatus("Syncing local dataset to Turso...");
+    try {
+      const tables = [
+        { name: "users", data: LocalDB.getUsers() },
+        { name: "products", data: LocalDB.getProducts() },
+        { name: "customers", data: LocalDB.getCustomers() },
+        { name: "orders", data: LocalDB.getOrders() },
+        { name: "deliveries", data: LocalDB.getDeliveries() },
+        { name: "complaints", data: LocalDB.getComplaints() },
+        { name: "audit_logs", data: LocalDB.getAuditLogs() },
+      ];
+      for (const t of tables) {
+        const response = await fetch("/api/db/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ table: t.name, rows: t.data })
+        });
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Push failed for table ${t.name}`);
+        }
+      }
+      alert("All local database records successfully uploaded to Turso cloud SQL database!");
+    } catch (err: any) {
+      alert(`Manual upload failed. Turso error: ${err.message || err}`);
+    } finally {
+      setSyncLoading(false);
+      setSyncStatus(null);
+    }
+  };
+
+  const handleConfigureDb = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!configDbUrl.trim()) {
+      alert("Please provide a Turso database URL.");
+      return;
+    }
+    setSyncLoading(true);
+    setSyncStatus("Connecting and initializing Turso database...");
+    try {
+      const response = await fetch("/api/db/configure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          databaseUrl: configDbUrl.trim(),
+          authToken: configAuthToken.trim() || undefined
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed registration");
+      }
+      alert("Successfully connected backend SQLite proxy to live cloud Turso instance and deployed schemas!");
+      await fetchDbStatus();
+      setShowConfigForm(false);
+      await handleManualPull(true);
+    } catch (err: any) {
+      alert(`Database config failed: ${err.message || err}`);
+    } finally {
+      setSyncLoading(false);
+      setSyncStatus(null);
+    }
+  };
+
   // Sync state on boot
   useEffect(() => {
     // Initial display of cached localized data
     refreshData();
-    
-    // Asynchronously update with live, fresh state from remote Turso cloud DB
-    LocalDB.pullFromDB()
-      .then((success) => {
-        if (success) {
-          refreshData();
-        }
-      })
-      .catch((err) => {
-        console.error("Failed syncing setup with Turso database:", err);
-      });
+
+    // Set and guarantee Turso as the default active database mode
+    localStorage.setItem("dmis_db_mode", "turso");
+    handleManualPull(true);
+    fetchDbStatus();
     
     // Automatically retrieve previous session if active in localStorage
     const savedUser = localStorage.getItem("dmis_logged_in_user");
@@ -114,6 +263,51 @@ export default function App() {
     if (confirm("Restore System Defaults? This resets all customer records, inventory balances, and order histories to the baseline Davao Sasa S.A.D. project specs!")) {
       LocalDB.reset();
     }
+  };
+
+  const [hasDbBackup, setHasDbBackup] = useState(() => LocalDB.hasBackup());
+
+  const handleRestoreBackup = () => {
+    if (confirm("Restore your previous database state from the auto-backup created before the reset? This will reload all your past custom configurations!")) {
+      if (LocalDB.restoreBackup()) {
+        refreshData();
+        setHasDbBackup(false);
+        localStorage.removeItem("dmis_reset_backup");
+      }
+    }
+  };
+
+  const handleExportBackup = () => {
+    const backupJson = LocalDB.exportAsJSON();
+    const blob = new Blob([backupJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Sasa_DMIS_Backup_${new Date().toISOString().split("T")[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    if (currentUser) {
+      LocalDB.appendLog(currentUser.username, "Downloaded full local database backup file", "SYSTEM");
+      refreshData();
+    }
+  };
+
+  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (LocalDB.importFromJSON(result)) {
+        refreshData();
+        setHasDbBackup(LocalDB.hasBackup());
+        alert("Database successfully restored from JSON backup!");
+      } else {
+        alert("Invalid database backup file. Please verify content format.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   // Returns to Login if no active session
@@ -226,20 +420,169 @@ export default function App() {
           </div>
 
           {/* Quick instructions and Reset DB features */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-3">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
-              <Settings className="w-4 h-4 text-indigo-600 animate-spin-slow" />
+          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-3.5">
+            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs text-indigo-600">
+              <Settings className="w-4 h-4" />
               <span>SAD Development Control</span>
             </div>
             <p className="leading-relaxed text-slate-400">
-              This system implements a fully reactive offline database. Your modifications persist dynamically in browser local storage.
+              Sasa Portal DMIS is fully integrated with Turso Cloud Database as the primary source of truth. All your records are securely stored and fetched server-side from your remote LibSQL/SQLite engine.
             </p>
-            <button
-              onClick={handleResetDatabase}
-              className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
-            >
-              Reset Database Coordinates
-            </button>
+
+            {/* Active Connection Status Badge */}
+            {dbStatus && (
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 mt-2 space-y-2 text-[10px]">
+                <div className="flex justify-between items-center gap-1.5">
+                  <span className="font-semibold text-slate-700">Connection:</span>
+                  <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded border uppercase transition-colors ${
+                    dbStatus.isRemote 
+                      ? "text-emerald-700 bg-emerald-50 border-emerald-100 font-black animate-pulse" 
+                      : "text-amber-700 bg-amber-50 border-amber-100"
+                  }`}>
+                    {dbStatus.isRemote ? "TURSO CLOUD (LIVE)" : "LOCAL SQL FILE (OFL)"}
+                  </span>
+                </div>
+                <div className="text-[9px] text-slate-500 truncate" title={dbStatus.databaseUrl}>
+                  <span className="font-semibold text-slate-605">URL:</span> {dbStatus.databaseUrl}
+                </div>
+
+                {/* Real-time background syncs */}
+                {Object.keys(backgroundSyncs).length > 0 && (
+                  <div className="pt-2 border-t border-slate-200/50 space-y-1">
+                    <span className="block font-bold text-slate-400 text-[8px] uppercase tracking-wide">Sync Telemetry</span>
+                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                      {Object.entries(backgroundSyncs).map(([table, sync]) => (
+                        <div key={table} className="flex justify-between items-center text-[8.5px] leading-tight">
+                          <span className="font-mono text-slate-500">{table}</span>
+                          {sync.status === "syncing" && (
+                            <span className="text-amber-600 font-semibold animate-pulse">syncing...</span>
+                          )}
+                          {sync.status === "success" && (
+                            <span className="text-emerald-600 font-semibold">✓ synced</span>
+                          )}
+                          {sync.status === "error" && (
+                            <span className="text-rose-600 font-bold" title={sync.error}>✗ error</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  <button
+                    onClick={handleManualUpload}
+                    disabled={syncLoading}
+                    className="bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-750 hover:border-blue-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
+                    title="Force upload browser local data into Turso"
+                  >
+                    Force Push
+                  </button>
+                  <button
+                    onClick={() => handleManualPull(false)}
+                    disabled={syncLoading}
+                    className="bg-white border border-slate-200 hover:bg-amber-50 hover:text-amber-750 hover:border-amber-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
+                    title="Pull latest live datasets from Turso into the browser cache"
+                  >
+                    Force Refresh
+                  </button>
+                </div>
+
+                <div className="pt-1.5 border-t border-slate-200/50 flex justify-between items-center">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigForm(!showConfigForm)}
+                    className="text-indigo-650 hover:text-indigo-800 font-bold transition-colors cursor-pointer text-[9px]"
+                  >
+                    {showConfigForm ? "Close Form ✕" : "Config Connection ⚙️"}
+                  </button>
+                  {syncStatus && (
+                    <span className="text-[8px] text-indigo-600 font-semibold animate-pulse">{syncStatus}</span>
+                  )}
+                </div>
+
+                {showConfigForm && (
+                  <form onSubmit={handleConfigureDb} className="pt-2 border-t border-slate-200 space-y-2 mt-1">
+                    <div className="space-y-0.5">
+                      <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Turso Database URL</label>
+                      <input
+                        type="text"
+                        value={configDbUrl}
+                        onChange={(e) => setConfigDbUrl(e.target.value)}
+                        placeholder="libsql://your-db-name.turso.io"
+                        className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-0.5">
+                      <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Auth Token</label>
+                      <input
+                        type="password"
+                        value={configAuthToken}
+                        onChange={(e) => setConfigAuthToken(e.target.value)}
+                        placeholder="Turso Authorization Token"
+                        className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={syncLoading}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 rounded text-[9px] cursor-pointer"
+                    >
+                      Apply & Initialize
+                    </button>
+                  </form>
+                )}
+              </div>
+            )}
+            
+            <div className="space-y-2 pt-2 border-t border-slate-100">
+              <button
+                onClick={handleResetDatabase}
+                className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
+                title="Saves a snapshot backup and reverts active dataset to baseline specs"
+              >
+                Restore Baseline Spec Seeds
+              </button>
+
+              {hasDbBackup && (
+                <button
+                  onClick={handleRestoreBackup}
+                  className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-[11px]"
+                  title="Undo previous reset and bring back your custom records"
+                >
+                  <Undo2 className="w-3.5 h-3.5" />
+                  Restore Pre-Reset Backup
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-1.5 pt-2 border-t border-slate-100">
+              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Backup & Migrations</span>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  onClick={handleExportBackup}
+                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700"
+                  title="Export live local DB as JSON for offline reporting"
+                >
+                  <Download className="w-3 h-3 text-slate-500" />
+                  Export JSON
+                </button>
+                <label
+                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700 cursor-pointer"
+                  title="Import and reload a previously exported JSON backup"
+                >
+                  <Upload className="w-3 h-3 text-slate-500" />
+                  Import JSON
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -301,16 +644,83 @@ export default function App() {
                   })}
                 </div>
 
-                <div className="pt-6 border-t border-slate-100 space-y-3">
-                  <button
-                    onClick={() => {
-                      handleResetDatabase();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="w-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 py-2.5 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer text-center block"
-                  >
-                    Reset baseline spec seeds
-                  </button>
+                  <div className="pt-6 border-t border-slate-100 space-y-3 text-xs">
+                    {/* Database Engine Status for Mobile */}
+                    <div className="space-y-2 border-b border-slate-100 pb-3">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="font-bold text-slate-400 uppercase tracking-wide">Database Connection</span>
+                        <span className="px-1.5 py-0.5 rounded font-bold uppercase text-[9px] bg-blue-50 text-blue-800 border border-blue-105">
+                          TURSO CLOUD
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        <button
+                          onClick={() => {
+                            handleManualUpload();
+                            setMobileMenuOpen(false);
+                          }}
+                          className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-705 text-[10px] cursor-pointer"
+                        >
+                          Force Push
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleManualPull();
+                            setMobileMenuOpen(false);
+                          }}
+                          className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-750 text-[10px] cursor-pointer"
+                        >
+                          Force Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        handleResetDatabase();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="w-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 py-2 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer text-center block"
+                      title="Saves backup and clears customizations"
+                    >
+                      Reset baseline spec seeds
+                    </button>
+
+                    {hasDbBackup && (
+                      <button
+                        onClick={() => {
+                          handleRestoreBackup();
+                          setMobileMenuOpen(false);
+                        }}
+                        className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-250 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-xs"
+                      >
+                        <Undo2 className="w-4 h-4" />
+                        Restore Pre-Reset Backup
+                      </button>
+                    )}
+
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={handleExportBackup}
+                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export JSON
+                    </button>
+                    <label
+                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      Import JSON
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleImportBackup}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
                 </div>
               </motion.div>
             </div>

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { 
   TrendingUp, 
@@ -44,7 +44,7 @@ import {
   DeliveryStatus, 
   ComplaintStatus 
 } from "../types";
-import { LocalDB } from "../db";
+import { LocalDB } from "../services/db";
 
 interface DashboardViewProps {
   products: Product[];
@@ -64,6 +64,14 @@ export default function DashboardView({
   
   const [restockAmount, setRestockAmount] = useState<{ [id: string]: number }>({});
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Simulation suite state
   const [genType, setGenType] = useState<string>("orders");
@@ -486,9 +494,23 @@ export default function DashboardView({
           <h1 className="text-2xl font-bold tracking-tight">Kumusta, {currentUser.name}!</h1>
           <p className="text-slate-300 text-sm">Welcome to your real-time administrative intelligence board.</p>
         </div>
-        <div className="mt-4 md:mt-0 bg-white/10 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl text-center text-xs text-white">
-          <span className="block text-slate-400">Current Local Time</span>
-          <span className="font-mono font-bold text-sm tracking-wide">June 15, 2026</span>
+        <div className="mt-4 md:mt-0 bg-white/10 backdrop-blur-md border border-white/10 px-4 py-2 rounded-xl text-center text-xs text-white min-w-[140px]">
+          <span className="block text-slate-400 font-medium">Current Local Time</span>
+          <span className="font-mono font-bold text-sm tracking-wide block">
+            {currentTime.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric"
+            })}
+          </span>
+          <span className="font-mono text-[11px] text-indigo-300 font-bold block mt-0.5">
+            {currentTime.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+              hour12: true
+            })}
+          </span>
         </div>
       </div>
 
