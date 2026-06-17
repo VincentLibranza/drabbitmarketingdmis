@@ -25,7 +25,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [dbStatus, setDbStatus] = useState<any>(null);
 
-  // States for all views - Initialized with empty arrays to prevent crashes
+  // --- 1. FIXED: Added 'users' state which was missing ---
+  const [users, setUsers] = useState([]);
   const [products, setProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -33,8 +34,10 @@ export default function App() {
   const [complaints, setComplaints] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
 
+  // --- 2. FIXED: Robust refresh logic for all 7 dimensions ---
   const refreshData = () => {
     try {
+      setUsers(LocalDB.getUsers() || []);
       setProducts(LocalDB.getProducts() || []);
       setCustomers(LocalDB.getCustomers() || []);
       setOrders(LocalDB.getOrders() || []);
@@ -42,7 +45,7 @@ export default function App() {
       setComplaints(LocalDB.getComplaints() || []);
       setAuditLogs(LocalDB.getAuditLogs() || []);
     } catch (e) {
-      console.error("Failed to refresh data:", e);
+      console.error("Critical Refresh Failure:", e);
     }
   };
 
@@ -61,13 +64,13 @@ export default function App() {
     if (saved) {
         try {
             setCurrentUser(JSON.parse(saved));
+            refreshData(); // Ensure UI has latest data for logged-in user
         } catch (e) {
             localStorage.removeItem("dmis_logged_in_user");
         }
     }
   }, []);
 
-  // Show login if no user
   if (!currentUser) return (
     <LoginScreen onLoginSuccess={(u) => { 
       setCurrentUser(u); 
@@ -90,7 +93,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Cloud Status Banner */}
+      {/* Banner */}
       {dbStatus && (
         <div className={`text-[10px] py-1 px-4 font-bold text-center uppercase tracking-widest text-white flex justify-center items-center gap-2 ${dbStatus.isRemote ? 'bg-emerald-600' : 'bg-rose-600'}`}>
           {dbStatus.isRemote ? <Globe className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
@@ -125,14 +128,12 @@ export default function App() {
       </header>
 
       <div className="flex-1 max-w-[1600px] w-full mx-auto p-8 flex flex-col lg:flex-row gap-8">
-        {/* Sidebar */}
         <aside className="w-72 shrink-0 space-y-6">
           <div className="bg-white border border-slate-100 rounded-[2rem] p-5 shadow-xl shadow-slate-200/50">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] px-4 block mb-5">Business Intelligence</span>
             <nav className="space-y-1">
               {menuItems.map(item => {
                  const Icon = item.icon;
-                 // Safe role check
                  if (item.restricted && currentUser?.role !== "Proprietor") return null;
                  return (
                    <button 
@@ -155,14 +156,13 @@ export default function App() {
             </nav>
           </div>
 
-          {/* SAD Development Control */}
           <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-xl shadow-slate-200/50">
             <div className="flex items-center gap-2 mb-4">
               <Settings className="w-4 h-4 text-slate-900" />
               <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">SAD Control</span>
             </div>
             <button 
-              onClick={() => { if(window.confirm("Reset all data?")) { LocalDB.reset(); }}}
+              onClick={() => { if(window.confirm("Reset all local data?")) { LocalDB.reset(); }}}
               className="w-full py-3 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-600 hover:bg-indigo-50"
             >
               Restore Baseline Seeds
@@ -170,7 +170,6 @@ export default function App() {
           </div>
         </aside>
 
-        {/* Main Content */}
         <main className="flex-1 bg-white border border-slate-100 rounded-[2.5rem] p-10 shadow-2xl min-h-[800px] relative overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div 
@@ -187,7 +186,8 @@ export default function App() {
                {activeTab === "Deliveries" && <DeliveryView deliveries={deliveries} orders={orders} customers={customers} currentUser={currentUser} onRefreshData={refreshData} />}
                {activeTab === "Complaints" && <ComplaintsView complaints={complaints} customers={customers} products={products} currentUser={currentUser} onRefreshData={refreshData} />}
                {activeTab === "Audit" && <AuditView logs={auditLogs} onRefreshData={refreshData} />}
-               {activeTab === "Users" && <UserManagementView users={[]} currentUser={currentUser} onRefreshData={refreshData} />}
+               {/* --- 3. FIXED: Now passes 'users' state instead of empty array --- */}
+               {activeTab === "Users" && <UserManagementView users={users} currentUser={currentUser} onRefreshData={refreshData} />}
             </motion.div>
           </AnimatePresence>
         </main>

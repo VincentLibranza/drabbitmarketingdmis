@@ -1,16 +1,32 @@
 export class LocalDB {
+  // 1. PULL DATA FROM CLOUD
   static async pullFromTurso(): Promise<void> {
     try {
       const res = await fetch("/api/db/pull");
       const result = await res.json();
       if (result.success && result.data) {
+        // Automatically save all 9 tables to browser storage
         Object.entries(result.data).forEach(([table, rows]) => {
           localStorage.setItem(`dmis_${table}`, JSON.stringify(rows));
         });
+        console.log("✅ All Database Tables Synced from Cloud");
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error("Cloud Pull Error:", e);
+    }
   }
 
+  // 2. CORE STORAGE HELPER
+  static get<T>(key: string, initialData: T): T {
+    try {
+      const data = localStorage.getItem(`dmis_${key}`);
+      return data ? JSON.parse(data) : initialData;
+    } catch {
+      return initialData;
+    }
+  }
+
+  // 3. UNIVERSAL SYNC PUSH
   static set(table: string, data: any[], skipSync = false) {
     localStorage.setItem(`dmis_${table}`, JSON.stringify(data));
     if (!skipSync) {
@@ -18,33 +34,44 @@ export class LocalDB {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ table, rows: data })
-      });
+      }).catch(err => console.warn(`Cloud sync delayed for ${table}`));
     }
   }
 
-  // Getters
-  static getUsers() { return JSON.parse(localStorage.getItem("dmis_users") || "[]"); }
-  static getProducts() { return JSON.parse(localStorage.getItem("dmis_products") || "[]"); }
-  static getCustomers() { return JSON.parse(localStorage.getItem("dmis_customers") || "[]"); }
-  static getOrders() { return JSON.parse(localStorage.getItem("dmis_orders") || "[]"); }
-  static getDeliveries() { return JSON.parse(localStorage.getItem("dmis_deliveries") || "[]"); }
-  static getComplaints() { return JSON.parse(localStorage.getItem("dmis_complaints") || "[]"); }
-  static getAuditLogs() { return JSON.parse(localStorage.getItem("dmis_audit_logs") || "[]"); }
+  // 4. GETTERS (Matches your UI Component expectations)
+  static getUsers() { return this.get("users", []); }
+  static getProducts() { return this.get("products", []); }
+  static getCustomers() { return this.get("customers", []); }
+  static getOrders() { return this.get("orders", []); }
+  static getDeliveries() { return this.get("deliveries", []); }
+  static getComplaints() { return this.get("complaints", []); }
+  static getAuditLogs() { return this.get("audit_logs", []); }
 
-  // Setters
-  static setDeliveries(d: any[]) { this.set("deliveries", d); }
-  static setComplaints(d: any[]) { this.set("complaints", d); }
+  // 5. SETTERS (Triggers automatic Cloud saving)
+  static setUsers(d: any[], s = false) { this.set("users", d, s); }
+  static setProducts(d: any[], s = false) { this.set("products", d, s); }
+  static setCustomers(d: any[], s = false) { this.set("customers", d, s); }
+  static setOrders(d: any[], s = false) { this.set("orders", d, s); }
+  static setDeliveries(d: any[], s = false) { this.set("deliveries", d, s); }
+  static setComplaints(d: any[], s = false) { this.set("complaints", d, s); }
+  static setAuditLogs(d: any[], s = false) { this.set("audit_logs", d, s); }
   
-  // Logic to prevent the "White Screen"
-  static appendLog(UserID: string, Action: string, TableRef: string) {
+  // 6. FIXED AUDIT LOG (Uses lowercase keys to prevent UI White Screen)
+  static appendLog(userId: string, action: string, tableRef: string) {
     const logs = this.getAuditLogs();
-    logs.unshift({ 
-      LogID: `LOG-${Math.floor(Math.random() * 1000000)}`, 
-      UserID: UserID, 
-      Action: Action, 
-      Timestamp: new Date().toLocaleString(), 
-      TableRef: TableRef 
-    });
-    this.set("audit_logs", logs);
+    const newLog = { 
+      logId: `LOG-${Date.now()}`, 
+      userId: userId, 
+      action: action, 
+      timestamp: new Date().toLocaleString(), 
+      tableRef: tableRef 
+    };
+    logs.unshift(newLog);
+    this.setAuditLogs(logs); // Triggers auto-push
+  }
+
+  static reset() {
+    localStorage.clear();
+    location.reload();
   }
 }
