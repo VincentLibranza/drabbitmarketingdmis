@@ -105,13 +105,13 @@ export default function App() {
       const json = await res.json();
       if (json.success && json.data) {
         const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
-        if (users && users.length > 0) LocalDB.setUsers(users);
-        if (products && products.length > 0) LocalDB.setProducts(products);
-        if (customers && customers.length > 0) LocalDB.setCustomers(customers);
-        if (orders && orders.length > 0) LocalDB.setOrders(orders);
-        if (deliveries && deliveries.length > 0) LocalDB.setDeliveries(deliveries);
-        if (complaints && complaints.length > 0) LocalDB.setComplaints(complaints);
-        if (auditLogs && auditLogs.length > 0) LocalDB.setAuditLogs(auditLogs);
+        if (users && users.length > 0) LocalDB.setUsers(users, true);
+        if (products && products.length > 0) LocalDB.setProducts(products, true);
+        if (customers && customers.length > 0) LocalDB.setCustomers(customers, true);
+        if (orders && orders.length > 0) LocalDB.setOrders(orders, true);
+        if (deliveries && deliveries.length > 0) LocalDB.setDeliveries(deliveries, true);
+        if (complaints && complaints.length > 0) LocalDB.setComplaints(complaints, true);
+        if (auditLogs && auditLogs.length > 0) LocalDB.setAuditLogs(auditLogs, true);
         
         refreshData();
         if (!silent) {

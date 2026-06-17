@@ -100,10 +100,10 @@ export class LocalDB {
     }
   }
 
-  static set<T>(key: string, data: T): void {
+  static set<T>(key: string, data: T, skipSync = false): void {
     try {
       localStorage.setItem(`dmis_${key}`, JSON.stringify(data));
-      if (Array.isArray(data)) {
+      if (Array.isArray(data) && !skipSync) {
         this.syncToTurso(key, data);
       }
     } catch (e) {
@@ -124,7 +124,8 @@ export class LocalDB {
         body: JSON.stringify({ table, rows }),
       });
       if (!response.ok) {
-        console.error(`[Turso Sync] Failed to sync table ${table}:`, response.statusText);
+        const errorJson = await response.json().catch(() => ({}));
+        console.error(`[Turso Sync] Failed to sync table ${table}:`, errorJson.error || response.statusText);
       } else {
         console.log(`[Turso Sync] Background synced ${rows.length} rows to Turso table: ${table}`);
       }
@@ -233,50 +234,50 @@ export class LocalDB {
   static getUsers(): User[] {
     return this.get<User[]>("users", initialUsers);
   }
-  static setUsers(users: User[]): void {
-    this.set("users", users);
+  static setUsers(users: User[], skipSync = false): void {
+    this.set("users", users, skipSync);
   }
 
   static getProducts(): Product[] {
     return this.get<Product[]>("products", initialProducts);
   }
-  static setProducts(products: Product[]): void {
-    this.set("products", products);
+  static setProducts(products: Product[], skipSync = false): void {
+    this.set("products", products, skipSync);
   }
 
   static getCustomers(): Customer[] {
     return this.get<Customer[]>("customers", initialCustomers);
   }
-  static setCustomers(customers: Customer[]): void {
-    this.set("customers", customers);
+  static setCustomers(customers: Customer[], skipSync = false): void {
+    this.set("customers", customers, skipSync);
   }
 
   static getOrders(): Order[] {
     return this.get<Order[]>("orders", initialOrders);
   }
-  static setOrders(orders: Order[]): void {
-    this.set("orders", orders);
+  static setOrders(orders: Order[], skipSync = false): void {
+    this.set("orders", orders, skipSync);
   }
 
   static getDeliveries(): Delivery[] {
     return this.get<Delivery[]>("deliveries", initialDeliveries);
   }
-  static setDeliveries(deliveries: Delivery[]): void {
-    this.set("deliveries", deliveries);
+  static setDeliveries(deliveries: Delivery[], skipSync = false): void {
+    this.set("deliveries", deliveries, skipSync);
   }
 
   static getComplaints(): Complaint[] {
     return this.get<Complaint[]>("complaints", initialComplaints);
   }
-  static setComplaints(complaints: Complaint[]): void {
-    this.set("complaints", complaints);
+  static setComplaints(complaints: Complaint[], skipSync = false): void {
+    this.set("complaints", complaints, skipSync);
   }
 
   static getAuditLogs(): AuditLog[] {
     return this.get<AuditLog[]>("audit_logs", initialAuditLogs);
   }
-  static setAuditLogs(logs: AuditLog[]): void {
-    this.set("audit_logs", logs);
+  static setAuditLogs(logs: AuditLog[], skipSync = false): void {
+    this.set("audit_logs", logs, skipSync);
   }
 
   static appendLog(username: string, action: string, tableRef: string): void {

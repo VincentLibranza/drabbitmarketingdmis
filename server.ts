@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createClient } from "@libsql/client";
 import dotenv from "dotenv";
 
@@ -11,6 +12,22 @@ const PORT = 3000;
 // Setup Turso Database client with lazy initialization & quote normalization
 let rawUrl = (process.env.TURSO_DATABASE_URL || "").trim();
 let rawToken = (process.env.TURSO_AUTH_TOKEN || "").trim();
+
+const configFilePath = path.join(process.cwd(), "turso-config.json");
+
+if (!rawUrl && fs.existsSync(configFilePath)) {
+  try {
+    const fileContent = fs.readFileSync(configFilePath, "utf8");
+    const parsed = JSON.parse(fileContent);
+    if (parsed.databaseUrl) {
+      rawUrl = parsed.databaseUrl.trim();
+      rawToken = (parsed.authToken || "").trim();
+      console.log(`[Turso Config] Restored database connection URL from turso-config.json: ${rawUrl}`);
+    }
+  } catch (err) {
+    console.error("[Turso Config] Failed to read turso-config.json:", err);
+  }
+}
 
 // Strip wrap-around quotes (single/double) if they are present in env variables
 if (rawUrl) {
@@ -28,8 +45,8 @@ if (rawToken) {
   }
 }
 
-// Fallback to transient memory-mode is used to remove local file-based .db storage
-export let dbUrl = rawUrl || "file::memory:";
+// Fallback to persistent local file-based database so changes survive backend server reloads
+export let dbUrl = rawUrl || "file:local.db";
 export let dbAuthToken = rawToken || undefined;
 
 let dbClientInstance: any = null;
@@ -386,6 +403,18 @@ app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
     dbClientInstance = client;
     dbUrl = databaseUrl;
     dbAuthToken = authToken || undefined;
+
+    // Save to turso-config.json so it persists across container/server cold-starts
+    try {
+      fs.writeFileSync(
+        configFilePath,
+        JSON.stringify({ databaseUrl, authToken }, null, 2),
+        "utf8"
+      );
+      console.log("[Turso Config] Saved db configuration to turso-config.json");
+    } catch (saveErr) {
+      console.error("[Turso Config] Failed saving config file:", saveErr);
+    }
 
     // Initialize/migrate the newly connected Turso database tables if needed
     await ensureDb();
