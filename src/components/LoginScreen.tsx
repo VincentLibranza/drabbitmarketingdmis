@@ -4,8 +4,17 @@
  */
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import { ShieldAlert, LogIn, Sparkles, AlertCircle, UserPlus, User as UserIcon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  ShieldAlert, 
+  LogIn, 
+  Sparkles, 
+  AlertCircle, 
+  UserPlus, 
+  User as UserIcon,
+  ShieldCheck,
+  Loader2
+} from "lucide-react";
 import { User, UserRole, UserStatus } from "../types";
 import { LocalDB } from "../services/db";
 
@@ -16,7 +25,7 @@ interface LoginScreenProps {
 export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [username, setUsername] = useState("");
-  const [fullName, setFullName] = useState(""); // Used for registration
+  const [fullName, setFullName] = useState(""); 
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,12 +42,10 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     const allUsers = LocalDB.getUsers();
 
     if (isRegistering) {
-      // --- REGISTRATION LOGIC ---
       if (!fullName.trim()) {
         setError("Please provide your full name.");
         return;
       }
-
       const exists = allUsers.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
       if (exists) {
         setError("This username is already taken.");
@@ -46,28 +53,23 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
       }
 
       setLoading(true);
-      
       const newUser: User = {
-        userId: `USR-${Date.now().toString().slice(-4)}`, // Generate simple ID
+        userId: `USR-${Date.now().toString().slice(-4)}`,
         username: username.trim().toLowerCase(),
         name: fullName.trim(),
-        role: UserRole.Staff, // New users default to Staff
+        role: UserRole.Staff, 
         status: UserStatus.Active
       };
 
-      // Save to LocalDB (This triggers the auto-sync to Turso)
       LocalDB.setUsers([...allUsers, newUser]);
-      
-      // Log the event
       LocalDB.appendLog(newUser.username, "New account registered successfully", "USER");
 
-      // Brief pause to simulate network/sync feel
       setTimeout(() => {
+        setLoading(false);
         onLoginSuccess(newUser);
       }, 1000);
 
     } else {
-      // --- LOGIN LOGIC ---
       const userMatched = allUsers.find(
         (u) => u.username.toLowerCase() === username.trim().toLowerCase()
       );
@@ -77,7 +79,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         return;
       }
 
-      if (userMatched.status !== "Active") {
+      if (userMatched.status !== UserStatus.Active) {
         setError("This account is currently deactivated. Contact Proprietor.");
         return;
       }
@@ -89,6 +91,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
 
   const handleQuickSelect = (userType: string) => {
     setIsRegistering(false);
+    setError(null);
     if (userType === "admin") {
       setUsername("admin");
       setPassword("password123");
@@ -99,32 +102,31 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center mb-4">
-          <div className="h-16 w-16 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-            <span className="text-3xl font-bold text-white tracking-widest font-sans">D</span>
+        <div className="flex justify-center mb-6">
+          <div className="h-20 w-20 rounded-[1.5rem] bg-indigo-600 flex items-center justify-center shadow-xl shadow-indigo-200">
+            <span className="text-4xl font-black text-white tracking-tighter">D</span>
           </div>
         </div>
-        <h2 className="text-center text-3xl font-bold tracking-tight text-slate-950 font-sans uppercase">
-          {isRegistering ? "Create Account" : "Drabbit DMIS"}
+        <h2 className="text-center text-3xl font-black tracking-tight text-slate-900">
+          {isRegistering ? "Register Account" : "Drabbit DMIS"}
         </h2>
-        <p className="mt-2 text-center text-sm text-slate-500 max-w-xs mx-auto">
-          {isRegistering ? "Join the Davao Sasa distribution network" : "Marketing Information System & Dashboard"}
+        <p className="mt-2 text-center text-sm text-slate-500 font-medium">
+          {isRegistering ? "Join the Davao Sasa distribution channel" : "Marketing Information System & Dashboard"}
         </p>
       </div>
 
       <motion.div 
-        initial={{ opacity: 0, y: 15 }}
+        initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="mt-8 sm:mx-auto sm:w-full sm:max-w-md"
+        className="mt-10 sm:mx-auto sm:w-full sm:max-w-md"
       >
-        <div className="bg-white py-8 px-4 shadow-xl shadow-slate-200/50 rounded-3xl sm:px-10 border border-slate-100">
-          <form className="space-y-5" onSubmit={handleSubmit}>
+        <div className="bg-white py-10 px-8 shadow-[0_20px_50px_rgba(0,0,0,0.05)] rounded-[2.5rem] border border-slate-100">
+          <form className="space-y-6" onSubmit={handleSubmit}>
             {error && (
-              <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="rounded-xl bg-rose-50 p-3 border border-rose-100 text-rose-700 text-[11px] font-bold flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="rounded-xl bg-rose-50 p-4 border border-rose-100 text-rose-700 text-xs font-bold flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0" />
                 <span>{error}</span>
               </motion.div>
             )}
@@ -135,106 +137,101 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="space-y-1.5"
+                  className="space-y-2"
                 >
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Your Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Juan Dela Cruz"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
-                  />
+                  <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Identity Name</label>
+                  <div className="relative">
+                    <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Vincent Jon Libranza"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="block w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-12 pr-4 py-4 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm font-bold transition-all"
+                    />
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Username Identifier</label>
-              <input
-                type="text"
-                required
-                placeholder="Unique username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
-              />
+            <div className="space-y-2">
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Username Identifier</label>
+              <div className="relative">
+                <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. admin, staff"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className="block w-full rounded-2xl border border-slate-200 bg-slate-50/50 pl-12 pr-4 py-4 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm font-bold transition-all"
+                />
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1">Secure Password</label>
+            <div className="space-y-2">
+              <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Password</label>
               <input
                 type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                className="block w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-4 py-4 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm font-bold transition-all"
               />
             </div>
 
-            <div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex w-full justify-center items-center gap-2 rounded-xl bg-indigo-600 px-4 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-100 hover:bg-indigo-500 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-              >
-                {loading ? (
-                  <span className="animate-pulse">Syncing...</span>
-                ) : (
-                  <>
-                    {isRegistering ? <UserPlus className="w-4 h-4" /> : <LogIn className="w-4 h-4" />}
-                    {isRegistering ? "Complete Registration" : "Sign In to Portal"}
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex w-full justify-center items-center gap-3 rounded-2xl bg-indigo-600 px-4 py-4 text-sm font-black text-white shadow-lg shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isRegistering ? <UserPlus className="w-5 h-5" /> : <LogIn className="w-5 h-5" />}
+              {isRegistering ? "Create Account" : "Sign In to Portal"}
+            </button>
           </form>
 
-          <div className="mt-6 flex flex-col items-center gap-4">
+          <div className="mt-8 flex flex-col items-center gap-6">
             <button
               type="button"
               onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
-              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors cursor-pointer"
+              className="text-xs font-black text-indigo-600 hover:text-indigo-800 transition-colors uppercase tracking-widest"
             >
-              {isRegistering ? "Already have an account? Back to Login" : "New staff member? Create an account"}
+              {isRegistering ? "Back to Secure Login" : "New User? Create Account"}
             </button>
-          </div>
 
-          {/* Quick-Access Test Panel - Only show on Login Mode */}
-          {!isRegistering && (
-            <div className="mt-8 pt-6 border-t border-slate-100">
-              <span className="block text-center text-[10px] text-slate-400 uppercase tracking-widest font-black mb-3">
-                Developer Fast-Lane
-              </span>
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <button
-                  type="button"
-                  onClick={() => handleQuickSelect("admin")}
-                  className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-slate-100 hover:border-indigo-200 transition-all text-slate-700 cursor-pointer"
-                >
-                  <ShieldAlert className="w-5 h-5 text-indigo-600 mb-1" />
-                  <span className="font-bold block">Proprietor</span>
-                  <span className="text-[9px] text-slate-400 mt-0.5">User: admin</span>
-                </button>
+            {!isRegistering && (
+              <div className="w-full pt-8 border-t border-slate-100">
+                <span className="block text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-6">
+                  Developer Quick-Access
+                </span>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    onClick={() => handleQuickSelect("admin")}
+                    className="flex flex-col items-center justify-center p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-indigo-50 hover:border-indigo-100 transition-all group cursor-pointer"
+                  >
+                    <ShieldAlert className="w-6 h-6 text-indigo-600 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black text-slate-900">Proprietor</span>
+                    <span className="text-[9px] text-slate-400 font-bold mt-1 uppercase">Username: admin</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleQuickSelect("staff")}
-                  className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-slate-100 hover:border-indigo-200 transition-all text-slate-700 cursor-pointer"
-                >
-                  <Sparkles className="w-5 h-5 text-teal-600 mb-1" />
-                  <span className="font-bold block">Staff</span>
-                  <span className="text-[9px] text-slate-400 mt-0.5">User: staff</span>
-                </button>
+                  <button
+                    onClick={() => handleQuickSelect("staff")}
+                    className="flex flex-col items-center justify-center p-5 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-teal-50 hover:border-teal-100 transition-all group cursor-pointer"
+                  >
+                    <Sparkles className="w-6 h-6 text-teal-600 mb-2 group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-black text-slate-900">Staff Worker</span>
+                    <span className="text-[9px] text-slate-400 font-bold mt-1 uppercase">Username: staff</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        <div className="text-center mt-8 text-slate-400 text-[10px] uppercase font-bold tracking-widest">
-          <p>© 2026 Drabbit Marketing — Davao City</p>
-          <p className="mt-1 text-slate-300">CS103P S.A.D. Final Project</p>
+        <div className="text-center mt-10 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] space-y-2">
+          <p>© 2026 Drabbit Marketing — Plainview Village KM.10 Sasa, Davao City</p>
+          <p className="text-slate-300">Prepared by Team Honda ADV</p>
         </div>
       </motion.div>
     </div>
