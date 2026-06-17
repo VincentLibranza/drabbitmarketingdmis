@@ -65,13 +65,43 @@ function getDbClient() {
   return dbClientInstance;
 }
 
+async function executeWithRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 1000): Promise<T> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = err.message || String(err);
+      const isTransient = 
+        errMsg.includes("502") || 
+        errMsg.includes("503") || 
+        errMsg.includes("504") ||
+        errMsg.includes("SERVER_ERROR") ||
+        errMsg.includes("HttpServerError") ||
+        errMsg.includes("socket hang up") ||
+        errMsg.includes("ETIMEDOUT") ||
+        errMsg.includes("ECONNRESET");
+
+      if (isTransient && attempt < maxRetries) {
+        const nextDelay = initialDelay * Math.pow(1.5, attempt - 1);
+        console.warn(`[Database Retry] Transient DB error (attempt ${attempt}/${maxRetries}): ${errMsg}. Retrying in ${Math.round(nextDelay)}ms...`);
+        await new Promise(resolve => setTimeout(resolve, nextDelay));
+      } else {
+        throw err;
+      }
+    }
+  }
+  throw lastError;
+}
+
 // Transparent lazy evaluation proxy matching the original SQL executive API
 export const db = {
-  execute(stmt: any) {
-    return getDbClient().execute(stmt);
+  execute(stmt: any): Promise<any> {
+    return executeWithRetry<any>(() => getDbClient().execute(stmt));
   },
-  batch(stmts: any[], mode?: any) {
-    return getDbClient().batch(stmts, mode);
+  batch(stmts: any[], mode?: any): Promise<any> {
+    return executeWithRetry<any>(() => getDbClient().batch(stmts, mode));
   }
 };
 
@@ -316,6 +346,7 @@ async function initDb() {
     console.log("Turso Database initialized perfectly!");
   } catch (err) {
     console.error("Failed to initialize database tables/seeds:", err);
+    throw err; // Rethrow so caller knows initialization failed
   }
 }
 
@@ -342,7 +373,9 @@ async function ensureDb() {
 
 // Middeware to guarantee DB initialization before executing DB routes
 app.use(async (req, res, next) => {
-  if (req.path.includes("/db/")) {
+  // Only require DB initialization for operations that actually read or write database content (pull or push)
+  // This allows the configuration (/db/configure) and status (/db/status) endpoints to load unblocked even if the DB is misconfigured
+  if (req.path.includes("/db/pull") || req.path.includes("/db/push")) {
     try {
       await ensureDb();
     } catch (err: any) {
