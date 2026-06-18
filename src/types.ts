@@ -114,9 +114,15 @@ export interface Complaint {
 }
 
 export interface AuditLog {
-  logId: string;
-  username: string;
-  action: string;
-  timestamp: string;
-  tableRef: string;
+  logId?: string;
+  username?: string;
+  action?: string;
+  timestamp?: string;
+  tableRef?: string;
+  LogID?: string;
+  UserID?: string;
+  userId?: string;
+  Action?: string;
+  Timestamp?: string;
+  TableRef?: string;
 }
