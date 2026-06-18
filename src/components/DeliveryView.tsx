@@ -51,15 +51,23 @@ export default function DeliveryView({
 
   // Filters
   const filteredDeliveries = deliveries.filter(d => {
+    if (!d) return false;
     const order = orders.find(o => o.orderId === d.orderId);
     const customer = order ? customers.find(c => c.customerId === order.customerId) : null;
+    
+    const driverName = d.assignedDriver || "Unassigned";
+    const orderRef = order?.orderRefNo || d.orderId || "";
+    const customerName = customer?.customerName || "Walk-In Customer / Guest";
+
     const matchesSearch = 
-      (order && order.orderRefNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (customer && customer.customerName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (d.assignedDriver.toLowerCase().includes(searchTerm.toLowerCase()));
+      orderRef.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      driverName.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const deliveryStatus = d.status || "Pending";
 
     if (activeTab === "All") return matchesSearch;
-    return matchesSearch && d.status === activeTab;
+    return matchesSearch && deliveryStatus === activeTab;
   });
 
   // Start Edit Mode

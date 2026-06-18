@@ -280,6 +280,17 @@ app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
   }
 });
 
+function autoParseJson(val: any) {
+  if (typeof val === "string" && (val.startsWith("[") || val.startsWith("{"))) {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+}
+
 app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
   try {
     await initSchema();
@@ -288,7 +299,14 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     for (const t of tables) {
       try {
         const r = await executeWithRetry(() => getDbClient().execute(`SELECT * FROM ${t}`)) as any;
-        data[t] = r.rows || [];
+        const rows = (r.rows || []).map((row: any) => {
+          const parsedRow: any = {};
+          for (const key of Object.keys(row)) {
+            parsedRow[key] = autoParseJson(row[key]);
+          }
+          return parsedRow;
+        });
+        data[t] = rows;
       } catch (tableErr: any) {
         console.warn(`[Vercel Serverless DB] Table query failed for t: ${t}, returning []`, tableErr);
         data[t] = [];
@@ -308,7 +326,16 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
     if (rows && rows.length > 0) {
       const keys = Object.keys(rows[0]);
       const sql = `INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`;
-      const stmts = rows.map(r => ({ sql, args: keys.map(k => r[k] ?? null) }));
+      const stmts = rows.map(r => ({
+        sql,
+        args: keys.map(k => {
+          const val = r[k];
+          if (val !== null && typeof val === "object") {
+            return JSON.stringify(val);
+          }
+          return val ?? null;
+        })
+      }));
       await executeWithRetry(() => clientInst.batch(stmts, "write"));
     }
     res.json({ success: true });
