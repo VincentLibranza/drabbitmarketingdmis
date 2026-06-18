@@ -204,76 +204,90 @@ export default function DeliveryView({
       </div>
 
       {/* Grid listing Active Routes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredDeliveries.map(d => {
-          const order = orders.find(o => o.orderId === d.orderId);
-          const customer = order ? customers.find(c => c.customerId === order.customerId) : null;
-          
-          return (
-            <motion.div
-              layout
-              key={d.deliveryId}
-              className={`bg-white border rounded-2xl p-5 shadow-sm space-y-4 hover:border-slate-350 transition-all ${
-                d.status === DeliveryStatus.Delivered ? 'border-slate-100 bg-slate-50/20' : 'border-indigo-100'
-              }`}
-            >
-              {/* Card top bar */}
-              <div className="flex justify-between items-start">
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
-                  d.status === DeliveryStatus.Delivered ? "bg-emerald-50 text-emerald-800" :
-                  d.status === DeliveryStatus.InTransit ? "bg-indigo-50 text-indigo-800" :
-                  "bg-amber-50 text-amber-800"
-                }`}>
-                  <Truck className="w-3 h-3" />
-                  {d.status}
-                </span>
+      {filteredDeliveries.length === 0 ? (
+        <div className="bg-white border border-slate-100 rounded-2xl p-12 text-center text-slate-500 space-y-4 shadow-sm max-w-lg mx-auto mt-6">
+          <div className="mx-auto w-12 h-12 bg-slate-50 border border-slate-200 text-indigo-500 rounded-xl flex items-center justify-center">
+            <Truck className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-sm font-bold text-slate-800">No active dispatch routes</h3>
+            <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
+              We couldn't find any logistics tracking records matching your active tab or search term. Create a new customer order to automatically generate its dispatch route.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredDeliveries.map(d => {
+            const order = orders.find(o => o.orderId === d.orderId);
+            const customer = order ? customers.find(c => c.customerId === order.customerId) : null;
+            
+            return (
+              <motion.div
+                layout
+                key={d.deliveryId}
+                className={`bg-white border rounded-2xl p-5 shadow-sm space-y-4 hover:border-slate-350 transition-all ${
+                  d.status === DeliveryStatus.Delivered ? 'border-slate-100 bg-slate-50/20' : 'border-indigo-100'
+                }`}
+              >
+                {/* Card top bar */}
+                <div className="flex justify-between items-start">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${
+                    d.status === DeliveryStatus.Delivered ? "bg-emerald-50 text-emerald-800" :
+                    d.status === DeliveryStatus.InTransit ? "bg-indigo-50 text-indigo-800" :
+                    "bg-amber-50 text-amber-800"
+                  }`}>
+                    <Truck className="w-3 h-3" />
+                    {d.status}
+                  </span>
 
-                <span className="text-[10px] text-slate-400 font-mono font-medium">Route: {d.deliveryId}</span>
-              </div>
+                  <span className="text-[10px] text-slate-400 font-mono font-medium">Route: {d.deliveryId}</span>
+                </div>
 
-              {/* Order Info Panel */}
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase font-bold text-slate-404 tracking-wider">Client Recipient</p>
-                <h4 className="font-bold text-slate-900 text-sm">{customer?.customerName || "Drabbit Walk-in Customer"}</h4>
-                <div className="flex items-start gap-1 text-slate-500 text-xs mt-1 leading-relaxed">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                  <span className="line-clamp-2 text-slate-500">{customer?.address || "Wait Counter Sasa Retail Desk"}</span>
-                </div>
-              </div>
-
-              {/* Logistik Handler Details */}
-              <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>Assignee: <strong className="font-semibold text-slate-800">{d.assignedDriver}</strong></span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>Scheduled Date: <strong className="font-mono text-slate-700">{d.scheduledDate}</strong></span>
-                </div>
-                {d.deliveryDate && (
-                  <div className="flex items-center gap-2 text-emerald-700 font-medium">
-                    <Clock className="w-3.5 h-3.5 text-emerald-500" />
-                    <span>Fulfilled Time: <span className="font-mono text-xs">{d.deliveryDate}</span></span>
+                {/* Order Info Panel */}
+                <div className="space-y-1">
+                  <p className="text-[10px] uppercase font-bold text-slate-404 tracking-wider">Client Recipient</p>
+                  <h4 className="font-bold text-slate-900 text-sm">{customer?.customerName || "Drabbit Walk-in Customer"}</h4>
+                  <div className="flex items-start gap-1 text-slate-500 text-xs mt-1 leading-relaxed">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                    <span className="line-clamp-2 text-slate-500">{customer?.address || "Wait Counter Sasa Retail Desk"}</span>
                   </div>
-                )}
-              </div>
+                </div>
 
-              {/* Action Trigger */}
-              <div className="pt-2 border-t border-slate-50 flex justify-between items-center text-xs">
-                <span className="text-[10px] font-mono text-slate-400">Order: {order?.orderRefNo || d.orderId}</span>
-                <button
-                  onClick={() => handleStartEdit(d)}
-                  className="px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-750 font-bold tracking-tight transition-all cursor-pointer"
-                >
-                  Schedule Dispatch
-                </button>
-              </div>
+                {/* Logistik Handler Details */}
+                <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>Assignee: <strong className="font-semibold text-slate-800">{d.assignedDriver}</strong></span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span>Scheduled Date: <strong className="font-mono text-slate-700">{d.scheduledDate}</strong></span>
+                  </div>
+                  {d.deliveryDate && (
+                    <div className="flex items-center gap-2 text-emerald-700 font-medium">
+                      <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Fulfilled Time: <span className="font-mono text-xs">{d.deliveryDate}</span></span>
+                    </div>
+                  )}
+                </div>
 
-            </motion.div>
-          );
-        })}
-      </div>
+                {/* Action Trigger */}
+                <div className="pt-2 border-t border-slate-50 flex justify-between items-center text-xs">
+                  <span className="text-[10px] font-mono text-slate-400">Order: {order?.orderRefNo || d.orderId}</span>
+                  <button
+                    onClick={() => handleStartEdit(d)}
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-750 font-bold tracking-tight transition-all cursor-pointer"
+                  >
+                    Schedule Dispatch
+                  </button>
+                </div>
+
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Editing Scheduler overlay Dialog */}
       <AnimatePresence>

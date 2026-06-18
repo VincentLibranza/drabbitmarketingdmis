@@ -86,6 +86,130 @@ try {
 }
 
 // Localstorage state manager for offline DMIS operations
+function normalizeRow(table: string, row: any): any {
+  if (!row || typeof row !== "object") return row;
+  
+  // Create a lowercase key map for easy lookup
+  const lowerRow: any = {};
+  for (const k of Object.keys(row)) {
+    lowerRow[k.toLowerCase()] = row[k];
+  }
+
+  const getVal = (camelKey: string, fallbackKeys: string[] = []): any => {
+    if (row[camelKey] !== undefined) return row[camelKey];
+    if (lowerRow[camelKey.toLowerCase()] !== undefined) return lowerRow[camelKey.toLowerCase()];
+    for (const f of fallbackKeys) {
+      if (row[f] !== undefined) return row[f];
+      if (lowerRow[f.toLowerCase()] !== undefined) return lowerRow[f.toLowerCase()];
+    }
+    return undefined;
+  };
+
+  if (table === "users") {
+    return {
+      userId: getVal("userId", ["userid", "UserID"]),
+      username: getVal("username"),
+      name: getVal("name"),
+      role: getVal("role"),
+      status: getVal("status"),
+    };
+  }
+
+  if (table === "products") {
+    return {
+      productId: getVal("productId", ["productid"]),
+      productName: getVal("productName", ["productname"]),
+      category: getVal("category"),
+      unitPrice: Number(getVal("unitPrice", ["unitprice"]) ?? 0),
+      stockQuantity: Number(getVal("stockQuantity", ["stockquantity"]) ?? 0),
+      reorderThreshold: Number(getVal("reorderThreshold", ["reorderthreshold"]) ?? 0),
+    };
+  }
+
+  if (table === "customers") {
+    return {
+      customerId: getVal("customerId", ["customerid"]),
+      customerName: getVal("customerName", ["customername"]),
+      address: getVal("address"),
+      contactPhone: getVal("contactPhone", ["contactphone", "contact"]),
+      email: getVal("email"),
+      status: getVal("status"),
+    };
+  }
+
+  if (table === "orders") {
+    let rawItems = getVal("items");
+    let items: any[] = [];
+    if (rawItems) {
+      if (typeof rawItems === "string") {
+        try {
+          items = JSON.parse(rawItems);
+        } catch {
+          items = [];
+        }
+      } else if (Array.isArray(rawItems)) {
+        items = rawItems;
+      }
+    }
+    
+    // Normalize line items
+    items = items.map(item => ({
+      itemId: item.itemId ?? item.itemid ?? "",
+      orderId: item.orderId ?? item.orderid ?? "",
+      productId: item.productId ?? item.productid ?? "",
+      quantity: Number(item.quantity ?? 1),
+      unitPrice: Number(item.unitPrice ?? item.unitprice ?? 0),
+    }));
+
+    return {
+      orderId: getVal("orderId", ["orderid"]),
+      orderRefNo: getVal("orderRefNo", ["orderrefno"]),
+      customerId: getVal("customerId", ["customerid"]),
+      orderDate: getVal("orderDate", ["orderdate"]),
+      status: getVal("status"),
+      paymentStatus: getVal("paymentStatus", ["paymentstatus"]),
+      totalAmount: Number(getVal("totalAmount", ["totalamount"]) ?? 0),
+      dueDate: getVal("dueDate", ["duedate"]),
+      items,
+    };
+  }
+
+  if (table === "deliveries") {
+    return {
+      deliveryId: getVal("deliveryId", ["deliveryid"]),
+      orderId: getVal("orderId", ["orderid"]),
+      scheduledDate: getVal("scheduledDate", ["scheduleddate"]),
+      deliveryDate: getVal("deliveryDate", ["deliverydate"]),
+      status: getVal("status"),
+      assignedDriver: getVal("assignedDriver", ["assigneddriver"]),
+    };
+  }
+
+  if (table === "complaints") {
+    return {
+      complaintId: getVal("complaintId", ["complaintid"]),
+      customerId: getVal("customerId", ["customerid"]),
+      productId: getVal("productId", ["productid"]),
+      description: getVal("description"),
+      status: getVal("status"),
+      resolution: getVal("resolution"),
+      dateLogged: getVal("dateLogged", ["datelogged"]),
+    };
+  }
+
+  if (table === "audit_logs") {
+    return {
+      logId: getVal("logId", ["logid", "LogID"]),
+      username: getVal("username", ["userid", "userId", "UserID"]),
+      action: getVal("action", ["Action"]),
+      timestamp: getVal("timestamp", ["Timestamp"]),
+      tableRef: getVal("tableRef", ["tableref"]),
+    };
+  }
+
+  return row;
+}
+
 export class LocalDB {
   static get<T>(key: string, initialData: T): T {
     try {
@@ -98,6 +222,11 @@ export class LocalDB {
       if (Array.isArray(initialData) && !Array.isArray(parsed)) {
         return initialData;
       }
+
+      if (Array.isArray(parsed)) {
+        return parsed.map((row: any) => normalizeRow(key, row)) as unknown as T;
+      }
+
       return parsed;
     } catch {
       return initialData;

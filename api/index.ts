@@ -291,6 +291,16 @@ function autoParseJson(val: any) {
   return val;
 }
 
+const SCHEMA_COLUMNS: Record<string, string[]> = {
+  users: ["userId", "username", "name", "role", "status"],
+  products: ["productId", "productName", "category", "unitPrice", "stockQuantity", "reorderThreshold"],
+  customers: ["customerId", "customerName", "contact", "address", "email", "tin"],
+  orders: ["orderId", "orderRefNo", "customerId", "orderDate", "status", "paymentStatus", "totalAmount", "dueDate", "items"],
+  deliveries: ["deliveryId", "orderId", "scheduledDate", "deliveryDate", "status", "assignedDriver"],
+  complaints: ["complaintId", "customerId", "productId", "description", "status", "resolution", "dateLogged"],
+  audit_logs: ["logId", "username", "action", "timestamp", "tableRef"]
+};
+
 app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
   try {
     await initSchema();
@@ -299,13 +309,40 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     for (const t of tables) {
       try {
         const r = await executeWithRetry(() => getDbClient().execute(`SELECT * FROM ${t}`)) as any;
+        const expectedCols = SCHEMA_COLUMNS[t] || [];
+        
         const rows = (r.rows || []).map((row: any) => {
           const parsedRow: any = {};
+          
+          // Row helper lookup in all lowercase
+          const rowLower: any = {};
           for (const key of Object.keys(row)) {
-            parsedRow[key] = autoParseJson(row[key]);
+            rowLower[key.toLowerCase()] = autoParseJson(row[key]);
           }
+
+          // Format to desired casing
+          for (const expectedCol of expectedCols) {
+            const lowKey = expectedCol.toLowerCase();
+            if (row[expectedCol] !== undefined) {
+              parsedRow[expectedCol] = autoParseJson(row[expectedCol]);
+            } else if (rowLower[lowKey] !== undefined) {
+              parsedRow[expectedCol] = rowLower[lowKey];
+            } else {
+              parsedRow[expectedCol] = null;
+            }
+          }
+
+          // Include any extra/unmapped keys with original casing as backup
+          for (const key of Object.keys(row)) {
+            const exists = expectedCols.some(c => c.toLowerCase() === key.toLowerCase());
+            if (!exists) {
+              parsedRow[key] = autoParseJson(row[key]);
+            }
+          }
+
           return parsedRow;
         });
+        
         data[t] = rows;
       } catch (tableErr: any) {
         console.warn(`[Vercel Serverless DB] Table query failed for t: ${t}, returning []`, tableErr);
