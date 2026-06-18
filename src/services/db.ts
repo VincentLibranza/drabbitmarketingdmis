@@ -135,9 +135,9 @@ function normalizeRow(table: string, row: any): any {
       customerId: getVal("customerId", ["customerid"]),
       customerName: getVal("customerName", ["customername"]),
       address: getVal("address"),
-      contactPhone: getVal("contactPhone", ["contactphone", "contact"]),
+      contact: getVal("contact", ["contactphone", "contactPhone"]),
       email: getVal("email"),
-      status: getVal("status"),
+      tin: getVal("tin", ["TIN"]),
     };
   }
 
