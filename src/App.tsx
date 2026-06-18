@@ -40,6 +40,7 @@ import DeliveryView from "./components/DeliveryView";
 import ComplaintsView from "./components/ComplaintsView";
 import UserManagementView from "./components/UserManagementView";
 import AuditView from "./components/AuditView";
+import DevControlView from "./components/DevControlView";
 
 export default function App() {
   
@@ -346,6 +347,7 @@ export default function App() {
     { id: "Deliveries", label: "Logistics Tracking", icon: Truck },
     { id: "Complaints", label: "Complaints & Returns", icon: AlertTriangle },
     { id: "Users", label: "Proprietor Management", icon: FolderLock, restricted: true },
+    { id: "DevControl", label: "SAD Dev Control", icon: Settings, restricted: true },
     { id: "Audit", label: "System Audits Trail", icon: Terminal }
   ];
 
@@ -440,175 +442,6 @@ export default function App() {
               );
             })}
           </div>
-
-          {/* Quick instructions and Reset DB features */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-xs text-slate-500 space-y-3.5">
-            <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs text-indigo-600">
-              <Settings className="w-4 h-4" />
-              <span>SAD Development Control</span>
-            </div>
-            <p className="leading-relaxed text-slate-400">
-              Sasa Portal DMIS is fully integrated with Turso Cloud Database as the primary source of truth. All your records are securely stored and fetched server-side from your remote LibSQL/SQLite engine.
-            </p>
-
-            {/* Active Connection Status Badge */}
-            {dbStatus && (
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 mt-2 space-y-2 text-[10px]">
-                <div className="flex justify-between items-center gap-1.5">
-                  <span className="font-semibold text-slate-700">Connection:</span>
-                  <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded border uppercase transition-colors ${
-                    dbStatus.isRemote 
-                      ? "text-emerald-700 bg-emerald-50 border-emerald-100 font-black animate-pulse" 
-                      : "text-amber-700 bg-amber-50 border-amber-100"
-                  }`}>
-                    {dbStatus.isRemote ? "TURSO CLOUD (LIVE)" : "LOCAL SQL FILE (OFL)"}
-                  </span>
-                </div>
-                <div className="text-[9px] text-slate-500 truncate" title={dbStatus.databaseUrl}>
-                  <span className="font-semibold text-slate-605">URL:</span> {dbStatus.databaseUrl}
-                </div>
-
-                {/* Real-time background syncs */}
-                {Object.keys(backgroundSyncs).length > 0 && (
-                  <div className="pt-2 border-t border-slate-200/50 space-y-1">
-                    <span className="block font-bold text-slate-400 text-[8px] uppercase tracking-wide">Sync Telemetry</span>
-                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
-                      {Object.keys(backgroundSyncs).map((table) => {
-                        const sync = backgroundSyncs[table] as any;
-                        return (
-                          <div key={table} className="flex justify-between items-center text-[8.5px] leading-tight">
-                            <span className="font-mono text-slate-500">{table}</span>
-                            {sync.status === "syncing" && (
-                              <span className="text-amber-600 font-semibold animate-pulse">syncing...</span>
-                            )}
-                            {sync.status === "success" && (
-                              <span className="text-emerald-600 font-semibold">✓ synced</span>
-                            )}
-                            {sync.status === "error" && (
-                              <span className="text-rose-600 font-bold" title={sync.error}>✗ error</span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-                
-                <div className="grid grid-cols-2 gap-1.5 pt-1">
-                  <button
-                    onClick={handleManualUpload}
-                    disabled={syncLoading}
-                    className="bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-750 hover:border-blue-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
-                    title="Force upload browser local data into Turso"
-                  >
-                    Force Push
-                  </button>
-                  <button
-                    onClick={() => handleManualPull(false)}
-                    disabled={syncLoading}
-                    className="bg-white border border-slate-200 hover:bg-amber-50 hover:text-amber-750 hover:border-amber-100 py-1 px-1 rounded-lg font-bold text-center transition-all cursor-pointer text-slate-705 text-[10px] disabled:opacity-50"
-                    title="Pull latest live datasets from Turso into the browser cache"
-                  >
-                    Force Refresh
-                  </button>
-                </div>
-
-                <div className="pt-1.5 border-t border-slate-200/50 flex justify-between items-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowConfigForm(!showConfigForm)}
-                    className="text-indigo-650 hover:text-indigo-800 font-bold transition-colors cursor-pointer text-[9px]"
-                  >
-                    {showConfigForm ? "Close Form ✕" : "Config Connection ⚙️"}
-                  </button>
-                  {syncStatus && (
-                    <span className="text-[8px] text-indigo-600 font-semibold animate-pulse">{syncStatus}</span>
-                  )}
-                </div>
-
-                {showConfigForm && (
-                  <form onSubmit={handleConfigureDb} className="pt-2 border-t border-slate-200 space-y-2 mt-1">
-                    <div className="space-y-0.5">
-                      <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Turso Database URL</label>
-                      <input
-                        type="text"
-                        value={configDbUrl}
-                        onChange={(e) => setConfigDbUrl(e.target.value)}
-                        placeholder="libsql://your-db-name.turso.io"
-                        className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-0.5">
-                      <label className="text-[8px] uppercase tracking-wide font-bold text-slate-400 block">Auth Token</label>
-                      <input
-                        type="password"
-                        value={configAuthToken}
-                        onChange={(e) => setConfigAuthToken(e.target.value)}
-                        placeholder="Turso Authorization Token"
-                        className="w-full text-[10px] px-1.5 py-1 rounded border border-slate-200 focus:outline-none focus:border-blue-500 bg-white"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={syncLoading}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1 rounded text-[9px] cursor-pointer"
-                    >
-                      Apply & Initialize
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
-            
-            <div className="space-y-2 pt-2 border-t border-slate-100">
-              <button
-                onClick={handleResetDatabase}
-                className="w-full bg-slate-50 border border-slate-200 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center block text-[11px]"
-                title="Saves a snapshot backup and reverts active dataset to baseline specs"
-              >
-                Restore Baseline Spec Seeds
-              </button>
-
-              {hasDbBackup && (
-                <button
-                  onClick={handleRestoreBackup}
-                  className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-[11px]"
-                  title="Undo previous reset and bring back your custom records"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  Restore Pre-Reset Backup
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-1.5 pt-2 border-t border-slate-100">
-              <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">Backup & Migrations</span>
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  onClick={handleExportBackup}
-                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700"
-                  title="Export live local DB as JSON for offline reporting"
-                >
-                  <Download className="w-3 h-3 text-slate-500" />
-                  Export JSON
-                </button>
-                <label
-                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-1.5 px-1 rounded-lg transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[10px] text-slate-700 cursor-pointer"
-                  title="Import and reload a previously exported JSON backup"
-                >
-                  <Upload className="w-3 h-3 text-slate-500" />
-                  Import JSON
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleImportBackup}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-          </div>
         </aside>
 
         {/* Mobile Flyout Sidebar Drawer */}
@@ -667,85 +500,6 @@ export default function App() {
                       </button>
                     );
                   })}
-                </div>
-
-                  <div className="pt-6 border-t border-slate-100 space-y-3 text-xs">
-                    {/* Database Engine Status for Mobile */}
-                    <div className="space-y-2 border-b border-slate-100 pb-3">
-                      <div className="flex justify-between items-center text-[11px]">
-                        <span className="font-bold text-slate-400 uppercase tracking-wide">Database Connection</span>
-                        <span className="px-1.5 py-0.5 rounded font-bold uppercase text-[9px] bg-blue-50 text-blue-800 border border-blue-105">
-                          TURSO CLOUD
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1.5 pt-1">
-                        <button
-                          onClick={() => {
-                            handleManualUpload();
-                            setMobileMenuOpen(false);
-                          }}
-                          className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-705 text-[10px] cursor-pointer"
-                        >
-                          Force Push
-                        </button>
-                        <button
-                          onClick={() => {
-                            handleManualPull();
-                            setMobileMenuOpen(false);
-                          }}
-                          className="bg-white border border-slate-200 py-1.5 px-1 rounded-lg font-bold text-center text-slate-750 text-[10px] cursor-pointer"
-                        >
-                          Force Refresh
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        handleResetDatabase();
-                        setMobileMenuOpen(false);
-                      }}
-                      className="w-full bg-slate-50 hover:bg-rose-50 hover:text-rose-600 py-2 rounded-xl border border-slate-200 text-xs font-bold transition-all cursor-pointer text-center block"
-                      title="Saves backup and clears customizations"
-                    >
-                      Reset baseline spec seeds
-                    </button>
-
-                    {hasDbBackup && (
-                      <button
-                        onClick={() => {
-                          handleRestoreBackup();
-                          setMobileMenuOpen(false);
-                        }}
-                        className="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-250 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1.5 text-xs"
-                      >
-                        <Undo2 className="w-4 h-4" />
-                        Restore Pre-Reset Backup
-                      </button>
-                    )}
-
-                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                    <button
-                      onClick={handleExportBackup}
-                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      Export JSON
-                    </button>
-                    <label
-                      className="bg-slate-50 border border-slate-200 hover:bg-slate-100 py-2 rounded-xl transition-all cursor-pointer font-bold text-center flex items-center justify-center gap-1 text-[11px] text-slate-705"
-                    >
-                      <Upload className="w-3.5 h-3.5" />
-                      Import JSON
-                      <input
-                        type="file"
-                        accept=".json"
-                        onChange={handleImportBackup}
-                        className="hidden"
-                      />
-                    </label>
-                  </div>
                 </div>
               </motion.div>
             </div>
@@ -817,6 +571,29 @@ export default function App() {
                   users={users}
                   currentUser={currentUser}
                   onRefreshData={refreshData}
+                />
+              )}
+              {activeTab === "DevControl" && (
+                <DevControlView
+                  currentUser={currentUser}
+                  dbStatus={dbStatus}
+                  backgroundSyncs={backgroundSyncs}
+                  syncLoading={syncLoading}
+                  syncStatus={syncStatus}
+                  configDbUrl={configDbUrl}
+                  setConfigDbUrl={setConfigDbUrl}
+                  configAuthToken={configAuthToken}
+                  setConfigAuthToken={setConfigAuthToken}
+                  showConfigForm={showConfigForm}
+                  setShowConfigForm={setShowConfigForm}
+                  hasDbBackup={hasDbBackup}
+                  handleManualUpload={handleManualUpload}
+                  handleManualPull={handleManualPull}
+                  handleConfigureDb={handleConfigureDb}
+                  handleResetDatabase={handleResetDatabase}
+                  handleRestoreBackup={handleRestoreBackup}
+                  handleExportBackup={handleExportBackup}
+                  handleImportBackup={handleImportBackup}
                 />
               )}
               {activeTab === "Audit" && (
