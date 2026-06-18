@@ -94,9 +94,27 @@ export class LocalDB {
         localStorage.setItem(`dmis_${key}`, JSON.stringify(initialData));
         return initialData;
       }
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (Array.isArray(initialData) && !Array.isArray(parsed)) {
+        return initialData;
+      }
+      return parsed;
     } catch {
       return initialData;
+    }
+  }
+
+  static async pullFromTurso(): Promise<void> {
+    try {
+      const res = await fetch("/api/db/pull");
+      const result = await res.json();
+      if (result.success && result.data) {
+        Object.entries(result.data).forEach(([table, rows]) => {
+          localStorage.setItem(`dmis_${table}`, JSON.stringify(rows));
+        });
+      }
+    } catch (e) {
+      console.error("Sync Pull Failed:", e);
     }
   }
 

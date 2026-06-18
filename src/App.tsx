@@ -123,7 +123,8 @@ export default function App() {
       if (!res.ok) throw new Error("Server pull endpoint returned failure");
       const json = await res.json();
       if (json.success && json.data) {
-        const { users, products, customers, orders, deliveries, complaints, auditLogs } = json.data;
+        const { users, products, customers, orders, deliveries, complaints } = json.data;
+        const auditLogs = json.data.audit_logs || json.data.auditLogs;
         if (users) LocalDB.setUsers(users, true);
         if (products) LocalDB.setProducts(products, true);
         if (customers) LocalDB.setCustomers(customers, true);
@@ -222,15 +223,32 @@ export default function App() {
 
   // Sync state on boot
   useEffect(() => {
-    // Initial display of cached localized data
+    // 1. Refresh UI from local storage first (No white screen)
     refreshData();
 
-    // Set and guarantee Turso as the default active database mode
+    // 2. Set and guarantee Turso database mode
     localStorage.setItem("dmis_db_mode", "turso");
-    handleManualPull(true);
-    fetchDbStatus();
-    
-    // Automatically retrieve previous session if active in localStorage
+
+    // 3. Check status and pull cloud data asynchronously
+    fetch("/api/db/status")
+      .then(res => res.json())
+      .then(status => {
+        setDbStatus(status);
+        if (status.isRemote) {
+          // Pull cloud data and then update UI
+          LocalDB.pullFromTurso().then(() => refreshData());
+        } else {
+          // If local/offline, trigger initial pull to ensure baseline is populated
+          handleManualPull(true).then(() => refreshData());
+        }
+      })
+      .catch((err) => {
+        console.warn("DB Status evaluation error on build:", err);
+        setDbStatus({ isRemote: false });
+        handleManualPull(true).then(() => refreshData());
+      });
+
+    // 4. Automatically retrieve previous session if active in localStorage
     const savedUser = localStorage.getItem("dmis_logged_in_user");
     if (savedUser) {
       try {
