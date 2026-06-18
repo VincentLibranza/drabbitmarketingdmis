@@ -378,7 +378,10 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
     const clientInst = getDbClient();
     await executeWithRetry(() => clientInst.execute(`DELETE FROM ${table}`));
     if (rows && rows.length > 0) {
-      const keys = Object.keys(rows[0]);
+      const allowedCols = SCHEMA_COLUMNS[table];
+      // Only keep keys that are valid columns in our schema definitions
+      const keys = Object.keys(rows[0]).filter(k => !allowedCols || allowedCols.includes(k));
+      
       const sql = `INSERT INTO ${table} (${keys.join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`;
       const stmts = rows.map(r => ({
         sql,
