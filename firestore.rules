@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (default-deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Primitive Global Helpers
+    function isSignedIn() {
+      // Allow operations in AI Studio Starter Tier without requiring Firebase Auth to be enabled
+      return true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validation Blueprints
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() <= 128
+        && data.username is string && data.username.size() <= 100
+        && data.name is string && data.name.size() <= 100
+        && data.role is string && (data.role == 'Proprietor' || data.role == 'Staff')
+        && data.status is string && (data.status == 'Active' || data.status == 'Inactive');
+    }
+
+    function isValidProduct(data) {
+      return data.productId is string && data.productId.size() <= 128
+        && data.productName is string && data.productName.size() <= 200
+        && data.category is string && data.category.size() <= 100
+        && data.unitPrice is number && data.unitPrice >= 0
+        && data.stockQuantity is number && data.stockQuantity >= 0
+        && data.reorderThreshold is number && data.reorderThreshold >= 0;
+    }
+
+    function isValidCustomer(data) {
+      return data.customerId is string && data.customerId.size() <= 128
+        && data.customerName is string && data.customerName.size() <= 200
+        && data.contact is string && data.contact.size() <= 50
+        && data.address is string && data.address.size() <= 500
+        && data.email is string && data.email.size() <= 150;
+    }
+
+    function isValidOrder(data) {
+      return data.orderId is string && data.orderId.size() <= 128
+        && data.orderRefNo is string && data.orderRefNo.size() <= 100
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.orderDate is string
+        && data.status is string && (data.status == 'Pending' || data.status == 'Confirmed' || data.status == 'Dispatched' || data.status == 'Delivered' || data.status == 'Cancelled')
+        && data.paymentStatus is string && (data.paymentStatus == 'Unpaid' || data.paymentStatus == 'Partial' || data.paymentStatus == 'Paid')
+        && data.totalAmount is number && data.totalAmount >= 0
+        && data.dueDate is string
+        && data.items is list;
+    }
+
+    function isValidDelivery(data) {
+      return data.deliveryId is string && data.deliveryId.size() <= 128
+        && data.orderId is string && data.orderId.size() <= 128
+        && data.scheduledDate is string
+        && data.status is string && (data.status == 'Pending' || data.status == 'In Transit' || data.status == 'Delivered')
+        && data.assignedDriver is string && data.assignedDriver.size() <= 150;
+    }
+
+    function isValidComplaint(data) {
+      return data.complaintId is string && data.complaintId.size() <= 128
+        && data.customerId is string && data.customerId.size() <= 128
+        && data.description is string && data.description.size() <= 2000
+        && data.status is string && (data.status == 'Open' || data.status == 'In Progress' || data.status == 'Resolved')
+        && data.dateLogged is string;
+    }
+
+    function isValidAuditLog(data) {
+      return data.logId is string && data.logId.size() <= 128
+        && data.username is string && data.username.size() <= 100
+        && data.action is string && data.action.size() <= 1000
+        && data.timestamp is string
+        && data.tableRef is string && data.tableRef.size() <= 100;
+    }
+
+    // Resource Mappings
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(userId) && isValidUser(incoming());
+      allow delete: if isSignedIn() && isValidId(userId);
+    }
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(productId) && isValidProduct(incoming());
+      allow delete: if isSignedIn() && isValidId(productId);
+    }
+
+    match /customers/{customerId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(customerId) && isValidCustomer(incoming());
+      allow delete: if isSignedIn() && isValidId(customerId);
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(orderId) && isValidOrder(incoming());
+      allow delete: if isSignedIn() && isValidId(orderId);
+    }
+
+    match /deliveries/{deliveryId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(deliveryId) && isValidDelivery(incoming());
+      allow delete: if isSignedIn() && isValidId(deliveryId);
+    }
+
+    match /complaints/{complaintId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidId(complaintId) && isValidComplaint(incoming());
+      allow delete: if isSignedIn() && isValidId(complaintId);
+    }
+
+    match /audit_logs/{logId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(logId) && isValidAuditLog(incoming());
+      allow update, delete: if false; // Immutable logs
+    }
+
+    match /test/{testId} {
+      allow read, write: if true;
+    }
+  }
+}

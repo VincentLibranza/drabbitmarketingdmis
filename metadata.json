@@ -1,0 +1,6 @@
+{
+  "name": "Drabbit DMIS Portal",
+  "description": "Information System for Drabbit Marketing supporting Order intake, live Inventory, automated Invoicing, Delivery tracking, Complaints log, and professional Audit Trail.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
