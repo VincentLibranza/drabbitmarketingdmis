@@ -176,7 +176,7 @@ export default function ComplaintsView({
             />
           </div>
 
-          <div className="flex items-center gap-1 bg-slate-50 border border-slate-205 px-3 py-2 rounded-xl">
+          <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl">
             <span className="text-xs text-slate-400 font-medium">Status:</span>
             <select
               value={statusFilter}

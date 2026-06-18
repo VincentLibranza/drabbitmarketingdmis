@@ -174,7 +174,7 @@ export default function DeliveryView({
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-100 p-4 rounded-2xl shadow-sm">
         
         {/* tabs */}
-        <div className="flex gap-1.5 p-1 bg-slate-50 border border-slate-205 rounded-xl">
+        <div className="flex gap-1.5 p-1 bg-slate-50 border border-slate-200 rounded-xl">
           {["All", "Pending", "In Transit", "Delivered"].map(tabName => (
             <button
               key={tabName}

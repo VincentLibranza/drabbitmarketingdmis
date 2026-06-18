@@ -4,6 +4,12 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --color-indigo-150: #d6dbff;
+  --color-indigo-650: #493fdf;
+  --color-indigo-850: #2a21a5;
+  --color-rose-850: #9f1239;
+  --color-amber-850: #92400e;
+  --color-emerald-850: #065f46;
 }
 
 /* Scrollbar customizations */
