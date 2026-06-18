@@ -5,8 +5,8 @@
 
 import React, { useState } from "react";
 import { motion } from "motion/react";
-import { ShieldAlert, LogIn, Sparkles, AlertCircle } from "lucide-react";
-import { User, UserRole } from "../types";
+import { ShieldAlert, LogIn, Sparkles, AlertCircle, ArrowLeft, UserPlus, CheckCircle2 } from "lucide-react";
+import { User, UserRole, UserStatus } from "../types";
 import { LocalDB } from "../services/db";
 
 interface LoginScreenProps {
@@ -17,6 +17,15 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Registration state
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [regName, setRegName] = useState("");
+  const [regUsername, setRegUsername] = useState("");
+  const [regRole, setRegRole] = useState<UserRole>(UserRole.Staff);
+  const [regPassword, setRegPassword] = useState("");
+  const [regConfirmPassword, setRegConfirmPassword] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +42,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     );
 
     if (!userMatched) {
-      setError("Username not found. Use 'admin' or 'staff' to test.");
+      setError("Username not found. Please verify your credentials or register a new account.");
       return;
     }
 
@@ -49,14 +58,60 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     onLoginSuccess(userMatched);
   };
 
-  const handleQuickSelect = (userType: string) => {
-    if (userType === "admin") {
-      setUsername("admin");
-      setPassword("password123");
-    } else {
-      setUsername("staff");
-      setPassword("password123");
+  const handleRegisterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+
+    const cleanUsername = regUsername.trim().toLowerCase();
+    const cleanName = regName.trim();
+
+    if (!cleanName) {
+      setError("Please key in your full name.");
+      return;
     }
+
+    if (!cleanUsername) {
+      setError("Please select a username identifier.");
+      return;
+    }
+
+    if (regPassword !== regConfirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    const currentUsers = LocalDB.getUsers();
+    if (currentUsers.some(u => u.username.toLowerCase() === cleanUsername)) {
+      setError("An account with that username already exists. Please choose another username.");
+      return;
+    }
+
+    const newId = `USR-${Math.floor(100 + Math.random() * 900)}`;
+    const newUser: User = {
+      userId: newId,
+      username: cleanUsername,
+      name: cleanName,
+      role: regRole,
+      status: UserStatus.Active
+    };
+
+    // Save user
+    const updatedUsers = [...currentUsers, newUser];
+    LocalDB.setUsers(updatedUsers);
+
+    // Logging action
+    LocalDB.appendLog(
+      cleanUsername,
+      `Registered new user account: ${cleanName} (Role: ${regRole})`,
+      "USER"
+    );
+
+    setSuccess("Account successfully registered! You can now log in.");
+    
+    // Auto-fill username & shift to login screen with success message
+    setUsername(cleanUsername);
+    setIsRegistering(false);
   };
 
   return (
@@ -82,87 +137,209 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         className="mt-8 sm:mx-auto sm:w-full sm:max-w-md"
       >
         <div className="bg-white py-8 px-4 shadow-xl shadow-slate-200/50 rounded-2xl sm:px-10 border border-slate-100">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {error && (
-              <div className="rounded-lg bg-rose-50 p-3 border border-rose-100 text-rose-700 text-xs flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>{error}</span>
+          {!isRegistering ? (
+            <>
+              {success && (
+                <div className="rounded-lg bg-emerald-50 p-3 border border-emerald-150 text-emerald-800 text-xs flex items-start gap-2 mb-4">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-600" />
+                  <span>{success}</span>
+                </div>
+              )}
+
+              {error && (
+                <div className="rounded-lg bg-rose-50 p-3 border border-rose-100 text-rose-700 text-xs flex items-start gap-2 mb-4">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <form className="space-y-6" onSubmit={handleSubmit}>
+                <div>
+                  <label htmlFor="username" className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Username Identifier
+                  </label>
+                  <div className="mt-2.5">
+                    <input
+                      id="username"
+                      name="username"
+                      type="text"
+                      required
+                      placeholder="e.g. admin, staff"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="password" className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Password
+                  </label>
+                  <div className="mt-2.5">
+                    <input
+                      id="password"
+                      name="password"
+                      type="password"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <button
+                    type="submit"
+                    className="flex w-full justify-center items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all cursor-pointer"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Sign In to Portal
+                  </button>
+                </div>
+              </form>
+
+              <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col gap-2">
+                <span className="text-xs text-center text-slate-400">
+                  Don't have an account yet?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegistering(true);
+                    setError(null);
+                    setSuccess(null);
+                    setRegUsername("");
+                    setRegName("");
+                    setRegPassword("");
+                    setRegConfirmPassword("");
+                    setRegRole(UserRole.Staff);
+                  }}
+                  className="flex w-full justify-center items-center gap-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-4 py-2.5 text-xs font-bold text-slate-700 transition-all cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4 text-indigo-600" />
+                  Create New Account
+                </button>
               </div>
-            )}
-
-            <div>
-              <label htmlFor="username" className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Username Identifier
-              </label>
-              <div className="mt-2.5">
-                <input
-                  id="username"
-                  name="username"
-                  type="text"
-                  required
-                  placeholder="e.g. admin, staff"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
-                />
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRegistering(false);
+                    setError(null);
+                    setSuccess(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Create Account</h3>
               </div>
-            </div>
 
-            <div>
-              <label htmlFor="password" className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
-                Password
-              </label>
-              <div className="mt-2.5">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
-                />
-              </div>
-            </div>
+              {error && (
+                <div className="rounded-lg bg-rose-50 p-3 border border-rose-100 text-rose-700 text-xs flex items-start gap-2 mb-4">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
 
-            <div>
-              <button
-                type="submit"
-                className="flex w-full justify-center items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all cursor-pointer"
-              >
-                <LogIn className="w-4 h-4" />
-                Sign In to Portal
-              </button>
-            </div>
-          </form>
+              <form onSubmit={handleRegisterSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Full Name
+                  </label>
+                  <div className="mt-2 text-slate-900">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe"
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                    />
+                  </div>
+                </div>
 
-          {/* Quick-Access Test Panel */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <span className="block text-center text-xs text-slate-400 uppercase tracking-wider font-medium mb-3">
-              Developer Quick-Access
-            </span>
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickSelect("admin")}
-                className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-slate-100 hover:border-indigo-200 transition-all text-slate-700 cursor-pointer text-center"
-              >
-                <ShieldAlert className="w-5 h-5 text-indigo-600 mb-1" />
-                <span className="font-semibold block">Proprietor</span>
-                <span className="text-[10px] text-slate-400 mt-1">Username: admin</span>
-              </button>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Username Identifier
+                  </label>
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. johndoe"
+                      value={regUsername}
+                      onChange={(e) => setRegUsername(e.target.value)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                    />
+                  </div>
+                </div>
 
-              <button
-                type="button"
-                onClick={() => handleQuickSelect("staff")}
-                className="flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200/80 bg-slate-50 hover:bg-slate-100 hover:border-indigo-200 transition-all text-slate-700 cursor-pointer text-center"
-              >
-                <Sparkles className="w-5 h-5 text-teal-600 mb-1" />
-                <span className="font-semibold block">Staff Worker</span>
-                <span className="text-[10px] text-slate-400 mt-1">Username: staff</span>
-              </button>
-            </div>
-          </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Access Role Group
+                  </label>
+                  <div className="mt-2">
+                    <select
+                      value={regRole}
+                      onChange={(e) => setRegRole(e.target.value as UserRole)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all bg-white"
+                    >
+                      <option value={UserRole.Staff}>Staff Worker (Fills Orders, Catalog View)</option>
+                      <option value={UserRole.Proprietor}>Proprietor Owner (Unrestricted Administration Access)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Password
+                  </label>
+                  <div className="mt-2">
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 uppercase tracking-wider">
+                    Confirm Password
+                  </label>
+                  <div className="mt-2">
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••"
+                      value={regConfirmPassword}
+                      onChange={(e) => setRegConfirmPassword(e.target.value)}
+                      className="block w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-slate-900 placeholder-slate-400 focus:border-indigo-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-600 text-sm transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="flex w-full justify-center items-center gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-all cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Register Account
+                  </button>
+                </div>
+              </form>
+            </>
+          )}
         </div>
 
         <div className="text-center mt-6 text-slate-400 text-xs">
