@@ -208,6 +208,18 @@ async function initSchema() {
         timestamp TEXT,
         tableRef TEXT
       )`
+    },
+    {
+      name: "invoices",
+      columns: ["invoiceId", "orderId", "invoiceDate", "totalAmount", "paymentStatus", "dueDate"],
+      sql: `CREATE TABLE IF NOT EXISTS invoices (
+        invoiceId TEXT PRIMARY KEY,
+        orderId TEXT,
+        invoiceDate TEXT,
+        totalAmount REAL,
+        paymentStatus TEXT,
+        dueDate TEXT
+      )`
     }
   ];
 
@@ -302,13 +314,14 @@ const SCHEMA_COLUMNS: Record<string, string[]> = {
   orders: ["orderId", "orderRefNo", "customerId", "orderDate", "status", "paymentStatus", "totalAmount", "dueDate", "items"],
   deliveries: ["deliveryId", "orderId", "scheduledDate", "deliveryDate", "status", "assignedDriver"],
   complaints: ["complaintId", "customerId", "productId", "description", "status", "resolution", "dateLogged"],
-  audit_logs: ["logId", "username", "action", "timestamp", "tableRef"]
+  audit_logs: ["logId", "username", "action", "timestamp", "tableRef"],
+  invoices: ["invoiceId", "orderId", "invoiceDate", "totalAmount", "paymentStatus", "dueDate"]
 };
 
 app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
   try {
     await initSchema();
-    const tables = ['users', 'products', 'customers', 'orders', 'deliveries', 'complaints', 'audit_logs'];
+    const tables = ['users', 'products', 'customers', 'orders', 'deliveries', 'complaints', 'audit_logs', 'invoices'];
     const data: any = {};
     for (const t of tables) {
       try {
@@ -395,7 +408,8 @@ app.post(["/api/db/reset", "/db/reset"], async (req, res) => {
       "DROP TABLE IF EXISTS orders",
       "DROP TABLE IF EXISTS deliveries",
       "DROP TABLE IF EXISTS complaints",
-      "DROP TABLE IF EXISTS audit_logs"
+      "DROP TABLE IF EXISTS audit_logs",
+      "DROP TABLE IF EXISTS invoices"
     ], "write"));
     
     await initSchema();

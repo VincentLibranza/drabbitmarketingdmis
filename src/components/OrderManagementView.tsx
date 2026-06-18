@@ -24,7 +24,7 @@ import {
   ChevronDown,
   Download
 } from "lucide-react";
-import { Order, OrderStatus, PaymentStatus, Product, Customer, OrderItem } from "../types";
+import { Order, OrderStatus, PaymentStatus, Product, Customer, OrderItem, Invoice } from "../types";
 import { LocalDB } from "../services/db";
 import { jsPDF } from "jspdf";
 
@@ -50,6 +50,7 @@ export default function OrderManagementView({
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [activeViewMode, setActiveViewMode] = useState<"orders" | "invoices">("orders");
 
   const downloadPDFInvoice = () => {
     if (!selectedInvoiceOrder) return;
@@ -384,6 +385,18 @@ export default function OrderManagementView({
     const currentOrders = LocalDB.getOrders();
     LocalDB.setOrders([newOrder, ...currentOrders]);
 
+    // Create and save invoice in database
+    const newInvoice: Invoice = {
+      invoiceId: `INV-${idSeed}`,
+      orderId: newOrder.orderId,
+      invoiceDate: newOrder.orderDate.split("T")[0],
+      totalAmount: newOrder.totalAmount,
+      paymentStatus: newOrder.paymentStatus,
+      dueDate: newOrder.dueDate
+    };
+    const currentInvoices = LocalDB.getInvoices();
+    LocalDB.setInvoices([newInvoice, ...currentInvoices]);
+
     // Append to system delivery scheduler automatically if status is pending/confirmed
     const currentDeliveries = LocalDB.getDeliveries();
     const newDelivery = {
@@ -471,6 +484,17 @@ export default function OrderManagementView({
       return o;
     });
     LocalDB.setOrders(updated);
+
+    // Also update corresponding invoice payment status
+    const currentInvoices = LocalDB.getInvoices();
+    const updatedInvoices = currentInvoices.map(inv => {
+      if (inv.orderId === orderId) {
+        return { ...inv, paymentStatus: nextPay };
+      }
+      return inv;
+    });
+    LocalDB.setInvoices(updatedInvoices);
+
     onRefreshData();
   };
 
@@ -488,6 +512,11 @@ export default function OrderManagementView({
     const updatedDeliveries = currentDeliveries.filter(d => d.orderId !== orderId);
     LocalDB.setDeliveries(updatedDeliveries);
 
+    // Delete corresponding invoices
+    const currentInvoices = LocalDB.getInvoices();
+    const updatedInvoices = currentInvoices.filter(i => i.orderId !== orderId);
+    LocalDB.setInvoices(updatedInvoices);
+
     // Add audit log
     LocalDB.appendLog(
       currentUser.username,
@@ -503,7 +532,33 @@ export default function OrderManagementView({
   return (
     <div className="space-y-6">
       
-      {/* Header bar controls */}
+      {/* View Switcher Tabs */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setActiveViewMode("orders")}
+          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+            activeViewMode === "orders"
+              ? "border-indigo-600 text-indigo-600 font-bold"
+              : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+          }`}
+        >
+          Orders Log Book
+        </button>
+        <button
+          onClick={() => setActiveViewMode("invoices")}
+          className={`px-5 py-3 text-sm font-semibold border-b-2 transition-all cursor-pointer ${
+            activeViewMode === "invoices"
+              ? "border-indigo-600 text-indigo-600 font-bold"
+              : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+          }`}
+        >
+          Invoices Registry Table (DB Synced)
+        </button>
+      </div>
+
+      {activeViewMode === "orders" ? (
+        <>
+          {/* Header bar controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white border border-slate-100 p-4 rounded-2xl shadow-sm">
         <div className="flex items-center gap-3 w-full sm:w-auto">
           <div className="relative w-full sm:w-72">
@@ -727,6 +782,99 @@ export default function OrderManagementView({
           </div>
         )}
       </div>
+      </>
+      ) : (
+        <div className="bg-white border border-slate-100 rounded-2xl overflow-hidden shadow-sm animate-fadeIn">
+          <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+            <div>
+              <span className="text-xs font-bold text-slate-500 tracking-wider uppercase">Live Database Table: INVOICES</span>
+              <p className="text-xs text-slate-400 mt-1 font-mono">Synced Schema: INVOICE(InvoiceID, OrderID, InvoiceDate, TotalAmount, PaymentStatus)</p>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold flex items-center gap-1.5 border border-emerald-100">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping"></span>
+              Live Synced
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm text-slate-750">
+              <thead>
+                <tr className="bg-slate-50/50 text-slate-400 text-xs font-bold border-b border-slate-100 uppercase tracking-wider">
+                  <th className="py-3.5 px-6">Invoice ID</th>
+                  <th className="py-3.5 px-6">Order ID Reference</th>
+                  <th className="py-3.5 px-6">Invoice Date</th>
+                  <th className="py-3.5 px-6 text-right">Total Amount Due</th>
+                  <th className="py-3.5 px-6 text-center">Payment Status</th>
+                  <th className="py-3.5 px-6 text-center">Due Date</th>
+                  <th className="py-3.5 px-6 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {LocalDB.getInvoices().length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                      <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-sm font-semibold">No Invoice Data Found</p>
+                      <p className="text-xs mt-1">Invoice records are populated in real-time when orders are placed.</p>
+                    </td>
+                  </tr>
+                ) : (
+                  LocalDB.getInvoices().map((inv) => {
+                    const linkedOrder = orders.find(o => o.orderId === inv.orderId);
+                    return (
+                      <tr key={inv.invoiceId} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-6 font-mono font-medium text-slate-900">{inv.invoiceId}</td>
+                        <td className="py-4 px-6">
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-indigo-600">{inv.orderId}</span>
+                            {linkedOrder && (
+                              <span className="text-xs text-slate-400 font-mono italic">({linkedOrder.orderRefNo})</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 font-mono text-slate-600">
+                          {inv.invoiceDate || "N/A"}
+                        </td>
+                        <td className="py-4 px-6 text-right font-mono font-bold text-slate-900">
+                          ₱{Number(inv.totalAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold ${
+                            inv.paymentStatus === PaymentStatus.Paid
+                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                              : inv.paymentStatus === PaymentStatus.Partial
+                              ? "bg-amber-50 text-amber-700 border border-amber-100"
+                              : "bg-rose-50 text-rose-700 border border-rose-100"
+                          }`}>
+                            {inv.paymentStatus}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center font-mono text-rose-500 font-medium">
+                          {inv.dueDate || "N/A"}
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          {linkedOrder ? (
+                            <button
+                              onClick={() => setSelectedInvoiceOrder(linkedOrder)}
+                              className="p-1 px-3.5 py-1.5 rounded-xl border border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                              title="Print and preview invoice"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>View Invoice PDF</span>
+                            </button>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">Order not found</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Invoice Generator printable sheet modal */}
       <AnimatePresence>

@@ -16,7 +16,8 @@ import {
   DeliveryStatus,
   Complaint,
   ComplaintStatus,
-  AuditLog
+  AuditLog,
+  Invoice
 } from "../types";
 
 // Seed Users
@@ -55,6 +56,9 @@ const initialOrders: Order[] = [];
 
 // Seed Deliveries
 const initialDeliveries: Delivery[] = [];
+
+// Seed Invoices
+const initialInvoices: Invoice[] = [];
 
 // Seed Complaints
 const initialComplaints: Complaint[] = [];
@@ -207,6 +211,17 @@ function normalizeRow(table: string, row: any): any {
     };
   }
 
+  if (table === "invoices") {
+    return {
+      invoiceId: getVal("invoiceId", ["invoiceid", "InvoiceID"]),
+      orderId: getVal("orderId", ["orderid", "OrderID"]),
+      invoiceDate: getVal("invoiceDate", ["invoicedate", "InvoiceDate"]),
+      totalAmount: Number(getVal("totalAmount", ["totalamount", "TotalAmount"]) ?? 0),
+      paymentStatus: getVal("paymentStatus", ["paymentstatus", "PaymentStatus"]),
+      dueDate: getVal("dueDate", ["duedate", "DueDate"])
+    };
+  }
+
   return row;
 }
 
@@ -304,6 +319,7 @@ export class LocalDB {
         deliveries: localStorage.getItem("dmis_deliveries"),
         complaints: localStorage.getItem("dmis_complaints"),
         audit_logs: localStorage.getItem("dmis_audit_logs"),
+        invoices: localStorage.getItem("dmis_invoices"),
         timestamp: new Date().toISOString()
       };
       localStorage.setItem("dmis_reset_backup", JSON.stringify(snapshot));
@@ -347,6 +363,7 @@ export class LocalDB {
       if (backup.deliveries) localStorage.setItem("dmis_deliveries", backup.deliveries);
       if (backup.complaints) localStorage.setItem("dmis_complaints", backup.complaints);
       if (backup.audit_logs) localStorage.setItem("dmis_audit_logs", backup.audit_logs);
+      if (backup.invoices) localStorage.setItem("dmis_invoices", backup.invoices);
       
       this.appendLog("System", "Restored previous custom session database from auto-backup.", "SYSTEM");
       return true;
@@ -365,6 +382,7 @@ export class LocalDB {
       deliveries: this.getDeliveries(),
       complaints: this.getComplaints(),
       audit_logs: this.getAuditLogs(),
+      invoices: this.getInvoices(),
       exporter: "Sasa Portal DMIS",
       timestamp: new Date().toISOString()
     };
@@ -381,6 +399,7 @@ export class LocalDB {
       if (parsed.deliveries) this.setDeliveries(parsed.deliveries);
       if (parsed.complaints) this.setComplaints(parsed.complaints);
       if (parsed.audit_logs) this.setAuditLogs(parsed.audit_logs);
+      if (parsed.invoices) this.setInvoices(parsed.invoices);
       
       this.appendLog("System", "Successfully imported external JSON database backup", "SYSTEM");
       return true;
@@ -431,6 +450,37 @@ export class LocalDB {
   }
   static setComplaints(complaints: Complaint[], skipSync = false): void {
     this.set("complaints", complaints, skipSync);
+  }
+
+  static getInvoices(): Invoice[] {
+    let invoices = this.get<Invoice[]>("invoices", initialInvoices);
+    const orders = this.getOrders();
+    // Auto-generate missing invoices for any orders to ensure we have data
+    let changed = false;
+    const updatedInvoices = [...invoices];
+    orders.forEach(o => {
+      const exists = updatedInvoices.some(inv => inv.orderId === o.orderId);
+      if (!exists) {
+        updatedInvoices.push({
+          invoiceId: `INV-${o.orderId.replace("ORD-", "")}`,
+          orderId: o.orderId,
+          invoiceDate: o.orderDate.split("T")[0],
+          totalAmount: o.totalAmount,
+          paymentStatus: o.paymentStatus,
+          dueDate: o.dueDate
+        });
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      this.setInvoices(updatedInvoices, false);
+      return updatedInvoices;
+    }
+    return invoices;
+  }
+  static setInvoices(invoices: Invoice[], skipSync = false): void {
+    this.set("invoices", invoices, skipSync);
   }
 
   static getAuditLogs(): AuditLog[] {

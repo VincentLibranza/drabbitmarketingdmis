@@ -190,6 +190,17 @@ async function initDb() {
       )
     `);
 
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS invoices (
+        invoiceId TEXT PRIMARY KEY,
+        orderId TEXT,
+        invoiceDate TEXT,
+        totalAmount REAL,
+        paymentStatus TEXT,
+        dueDate TEXT
+      )
+    `);
+
     // Seed Users if empty
     const userCheck = await db.execute("SELECT COUNT(*) as count FROM users");
     if (Number(userCheck.rows[0].count) === 0) {
@@ -495,7 +506,8 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
       ordersRes,
       deliveriesRes,
       complaintsRes,
-      auditLogsRes
+      auditLogsRes,
+      invoicesRes
     ] = await Promise.all([
       db.execute("SELECT * FROM users"),
       db.execute("SELECT * FROM products"),
@@ -503,7 +515,8 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
       db.execute("SELECT * FROM orders"),
       db.execute("SELECT * FROM deliveries"),
       db.execute("SELECT * FROM complaints"),
-      db.execute("SELECT * FROM audit_logs")
+      db.execute("SELECT * FROM audit_logs"),
+      db.execute("SELECT * FROM invoices")
     ]);
 
     // Format results correctly
@@ -534,8 +547,9 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     const deliveries = deliveriesRes.rows;
     const complaints = complaintsRes.rows;
     const auditLogs = auditLogsRes.rows;
+    const invoices = invoicesRes.rows;
 
-    console.log(`[DB Pull Proxy] Load successful. Row counts: users=${users.length}, products=${products.length}, customers=${customers.length}, orders=${orders.length}, deliveries=${deliveries.length}, complaints=${complaints.length}, auditLogs=${auditLogs.length}`);
+    console.log(`[DB Pull Proxy] Load successful. Row counts: users=${users.length}, products=${products.length}, customers=${customers.length}, orders=${orders.length}, deliveries=${deliveries.length}, complaints=${complaints.length}, auditLogs=${auditLogs.length}, invoices=${invoices.length}`);
 
     let maskedUrl = "Unconfigured (Pending Connection)";
     let isRemote = false;
@@ -564,6 +578,7 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
          deliveries,
          complaints,
          auditLogs,
+        invoices,
        },
      });
    } catch (error: any) {
@@ -712,6 +727,21 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
           ],
         });
       }
+    } else if (table === "invoices") {
+      statements.push({ sql: "DELETE FROM invoices", args: [] });
+      for (const row of rows) {
+        statements.push({
+          sql: "INSERT INTO invoices (invoiceId, orderId, invoiceDate, totalAmount, paymentStatus, dueDate) VALUES (?, ?, ?, ?, ?, ?)",
+          args: [
+            row.invoiceId,
+            row.orderId ?? null,
+            row.invoiceDate ?? null,
+            row.totalAmount ?? null,
+            row.paymentStatus ?? null,
+            row.dueDate ?? null
+          ],
+        });
+      }
     } else {
       console.warn(`[DB Push Proxy] Unknown table request blocked: "${table}"`);
       return res.status(400).json({ error: `Unknown table name: "${table}"` });
@@ -745,7 +775,8 @@ app.post(["/api/db/reset", "/db/reset"], async (req, res) => {
       "DROP TABLE IF EXISTS orders",
       "DROP TABLE IF EXISTS deliveries",
       "DROP TABLE IF EXISTS complaints",
-      "DROP TABLE IF EXISTS audit_logs"
+      "DROP TABLE IF EXISTS audit_logs",
+      "DROP TABLE IF EXISTS invoices"
     ], "write");
 
     await initDb();

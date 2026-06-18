@@ -27,7 +27,7 @@ import {
   Undo2
 } from "lucide-react";
 
-import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole } from "./types";
+import { User, Product, Customer, Order, Delivery, Complaint, AuditLog, UserRole, Invoice } from "./types";
 import { LocalDB } from "./services/db";
 
 // Core views
@@ -55,6 +55,7 @@ export default function App() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
 
   // Database connection engine states
   const [syncLoading, setSyncLoading] = useState<boolean>(false);
@@ -96,6 +97,7 @@ export default function App() {
     setDeliveries(LocalDB.getDeliveries());
     setComplaints(LocalDB.getComplaints());
     setAuditLogs(LocalDB.getAuditLogs());
+    setInvoices(LocalDB.getInvoices());
   };
 
   const fetchDbStatus = async () => {
@@ -123,7 +125,7 @@ export default function App() {
       if (!res.ok) throw new Error("Server pull endpoint returned failure");
       const json = await res.json();
       if (json.success && json.data) {
-        const { users, products, customers, orders, deliveries, complaints } = json.data;
+        const { users, products, customers, orders, deliveries, complaints, invoices } = json.data;
         const auditLogs = json.data.audit_logs || json.data.auditLogs;
         if (users) LocalDB.setUsers(users, true);
         if (products) LocalDB.setProducts(products, true);
@@ -132,6 +134,7 @@ export default function App() {
         if (deliveries) LocalDB.setDeliveries(deliveries, true);
         if (complaints) LocalDB.setComplaints(complaints, true);
         if (auditLogs) LocalDB.setAuditLogs(auditLogs, true);
+        if (invoices) LocalDB.setInvoices(invoices, true);
         
         refreshData();
         if (!silent) {
@@ -167,6 +170,7 @@ export default function App() {
         { name: "deliveries", data: LocalDB.getDeliveries() },
         { name: "complaints", data: LocalDB.getComplaints() },
         { name: "audit_logs", data: LocalDB.getAuditLogs() },
+        { name: "invoices", data: LocalDB.getInvoices() },
       ];
       for (const t of tables) {
         const response = await fetch("/api/db/push", {
