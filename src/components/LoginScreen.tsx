@@ -118,8 +118,13 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center mb-4">
-          <div className="h-16 w-16 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-200">
-            <span className="text-3xl font-bold text-white tracking-widest font-sans">D</span>
+          <div className="h-16 w-16 rounded-2xl bg-white border border-slate-150 flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+            <img 
+              src="/src/assets/images/drabbit_logo_1781809598838.jpg" 
+              alt="Drabbit Logo" 
+              className="h-full w-full object-cover"
+              referrerPolicy="no-referrer"
+            />
           </div>
         </div>
         <h2 className="text-center text-3xl font-bold tracking-tight text-slate-950 font-sans">

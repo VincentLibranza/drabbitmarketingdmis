@@ -369,8 +369,13 @@ export default function App() {
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
 
-              <div className="h-9 w-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black tracking-widest text-lg shadow shadow-indigo-200">
-                D
+              <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center border border-slate-150 shadow-sm overflow-hidden shrink-0">
+                <img 
+                  src="/src/assets/images/drabbit_logo_1781809598838.jpg" 
+                  alt="Drabbit Logo" 
+                  className="h-full w-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
               </div>
               <div className="space-y-0.5">
                 <span className="font-bold text-slate-900 text-sm tracking-tight leading-none block uppercase font-sans">
@@ -467,8 +472,13 @@ export default function App() {
               >
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-black text-sm">
-                      D
+                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center border border-slate-150 overflow-hidden shrink-0">
+                      <img 
+                        src="/src/assets/images/drabbit_logo_1781809598838.jpg" 
+                        alt="Drabbit Logo" 
+                        className="h-full w-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
                     </div>
                     <span className="font-bold text-slate-900 text-xs tracking-tight">DRABBIT DMIS PORTAL</span>
                   </div>
