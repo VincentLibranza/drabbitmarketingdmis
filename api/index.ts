@@ -86,26 +86,133 @@ async function executeWithRetry<T>(fn: () => Promise<T>, maxRetries = 3, initial
   throw lastError;
 }
 
-// Schema setup (ERD Compliant)
+async function checkAndSelfHealTable(tableName: string, createSql: string, expectedColumns: string[]) {
+  const clientInst = getDbClient();
+  try {
+    // 1. Check if table exists
+    const rowCountRes = await clientInst.execute(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`) as any;
+    if (rowCountRes.rows.length === 0) {
+      console.log(`[Vercel Serverless DB] Table ${tableName} does not exist. Creating cleanly...`);
+      await clientInst.execute(createSql);
+      return;
+    }
+
+    // 2. Fetch column information
+    const pragmaRes = await clientInst.execute(`PRAGMA table_info(${tableName})`) as any;
+    const existingColumns = (pragmaRes.rows || []).map((row: any) => String(row.name).toLowerCase());
+    
+    // 3. Check if all expected columns exist (case-insensitive)
+    const needsHeal = expectedColumns.some(col => !existingColumns.includes(col.toLowerCase()));
+    
+    if (needsHeal) {
+      console.warn(`[Vercel Serverless DB] Schema mismatch detected for table ${tableName}. Recreating to align schemas...`);
+      await clientInst.execute(`DROP TABLE IF EXISTS ${tableName}`);
+      await clientInst.execute(createSql);
+    }
+  } catch (err) {
+    console.error(`[Vercel Serverless DB] Self-healing check failed for table ${tableName}:`, err);
+    // Fallback: try to create if not exists
+    try {
+      await clientInst.execute(createSql);
+    } catch (e) {}
+  }
+}
+
+// Schema setup (ERD Compliant with Local Setup)
 async function initSchema() {
   if (!dbUrl || dbUrl === "file:local.db") return;
-  const sqls = [
-    `CREATE TABLE IF NOT EXISTS users (UserID TEXT PRIMARY KEY, Username TEXT, Password TEXT, Role TEXT, Status TEXT)`,
-    `CREATE TABLE IF NOT EXISTS products (ProdID TEXT PRIMARY KEY, ProdName TEXT, Category TEXT, UnitPrice REAL, StockQty INTEGER, MinLevel INTEGER)`,
-    `CREATE TABLE IF NOT EXISTS customers (CustID TEXT PRIMARY KEY, CustName TEXT, Contact TEXT, Address TEXT, Email TEXT)`,
-    `CREATE TABLE IF NOT EXISTS orders (OrdID TEXT PRIMARY KEY, OrdRefNo TEXT, CustID TEXT, OrdDate TEXT, Status TEXT, UserID TEXT)`,
-    `CREATE TABLE IF NOT EXISTS order_items (ItemID TEXT PRIMARY KEY, OrdID TEXT, ProdID TEXT, Quantity INTEGER, UnitPrice REAL)`,
-    `CREATE TABLE IF NOT EXISTS invoices (InvID TEXT PRIMARY KEY, OrdID TEXT, InvDate TEXT, TotalAmt REAL, PayStatus TEXT)`,
-    `CREATE TABLE IF NOT EXISTS deliveries (DelID TEXT PRIMARY KEY, OrdID TEXT, SchDate TEXT, DelDate TEXT, Status TEXT)`,
-    `CREATE TABLE IF NOT EXISTS complaints (ComplID TEXT PRIMARY KEY, CustID TEXT, Description TEXT, Status TEXT, Resolution TEXT)`,
-    `CREATE TABLE IF NOT EXISTS audit_logs (LogID TEXT PRIMARY KEY, UserID TEXT, Action TEXT, Timestamp TEXT, TableRef TEXT)`
-  ];
-  for (const s of sqls) {
-    try {
-      await executeWithRetry(() => getDbClient().execute(s));
-    } catch (err) {
-      console.error(`[Vercel Serverless DB] Error creating table statement: ${s}`, err);
+
+  const tablesToVerify = [
+    {
+      name: "users",
+      columns: ["userId", "username", "name", "role", "status"],
+      sql: `CREATE TABLE IF NOT EXISTS users (
+        userId TEXT PRIMARY KEY,
+        username TEXT,
+        name TEXT,
+        role TEXT,
+        status TEXT
+      )`
+    },
+    {
+      name: "products",
+      columns: ["productId", "productName", "category", "unitPrice", "stockQuantity", "reorderThreshold"],
+      sql: `CREATE TABLE IF NOT EXISTS products (
+        productId TEXT PRIMARY KEY,
+        productName TEXT,
+        category TEXT,
+        unitPrice REAL,
+        stockQuantity INTEGER,
+        reorderThreshold INTEGER
+      )`
+    },
+    {
+      name: "customers",
+      columns: ["customerId", "customerName", "contact", "address", "email", "tin"],
+      sql: `CREATE TABLE IF NOT EXISTS customers (
+        customerId TEXT PRIMARY KEY,
+        customerName TEXT,
+        contact TEXT,
+        address TEXT,
+        email TEXT,
+        tin TEXT
+      )`
+    },
+    {
+      name: "orders",
+      columns: ["orderId", "orderRefNo", "customerId", "orderDate", "status", "paymentStatus", "totalAmount", "dueDate", "items"],
+      sql: `CREATE TABLE IF NOT EXISTS orders (
+        orderId TEXT PRIMARY KEY,
+        orderRefNo TEXT,
+        customerId TEXT,
+        orderDate TEXT,
+        status TEXT,
+        paymentStatus TEXT,
+        totalAmount REAL,
+        dueDate TEXT,
+        items TEXT
+      )`
+    },
+    {
+      name: "deliveries",
+      columns: ["deliveryId", "orderId", "scheduledDate", "deliveryDate", "status", "assignedDriver"],
+      sql: `CREATE TABLE IF NOT EXISTS deliveries (
+        deliveryId TEXT PRIMARY KEY,
+        orderId TEXT,
+        scheduledDate TEXT,
+        deliveryDate TEXT,
+        status TEXT,
+        assignedDriver TEXT
+      )`
+    },
+    {
+      name: "complaints",
+      columns: ["complaintId", "customerId", "productId", "description", "status", "resolution", "dateLogged"],
+      sql: `CREATE TABLE IF NOT EXISTS complaints (
+        complaintId TEXT PRIMARY KEY,
+        customerId TEXT,
+        productId TEXT,
+        description TEXT,
+        status TEXT,
+        resolution TEXT,
+        dateLogged TEXT
+      )`
+    },
+    {
+      name: "audit_logs",
+      columns: ["logId", "username", "action", "timestamp", "tableRef"],
+      sql: `CREATE TABLE IF NOT EXISTS audit_logs (
+        logId TEXT PRIMARY KEY,
+        username TEXT,
+        action TEXT,
+        timestamp TEXT,
+        tableRef TEXT
+      )`
     }
+  ];
+
+  for (const table of tablesToVerify) {
+    await checkAndSelfHealTable(table.name, table.sql, table.columns);
   }
 }
 
@@ -176,7 +283,7 @@ app.post(["/api/db/configure", "/db/configure"], async (req, res) => {
 app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
   try {
     await initSchema();
-    const tables = ['users', 'products', 'customers', 'orders', 'order_items', 'invoices', 'deliveries', 'complaints', 'audit_logs'];
+    const tables = ['users', 'products', 'customers', 'orders', 'deliveries', 'complaints', 'audit_logs'];
     const data: any = {};
     for (const t of tables) {
       try {
@@ -218,8 +325,6 @@ app.post(["/api/db/reset", "/db/reset"], async (req, res) => {
       "DROP TABLE IF EXISTS products",
       "DROP TABLE IF EXISTS customers",
       "DROP TABLE IF EXISTS orders",
-      "DROP TABLE IF EXISTS order_items",
-      "DROP TABLE IF EXISTS invoices",
       "DROP TABLE IF EXISTS deliveries",
       "DROP TABLE IF EXISTS complaints",
       "DROP TABLE IF EXISTS audit_logs"
