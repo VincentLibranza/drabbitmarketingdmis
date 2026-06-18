@@ -49,6 +49,7 @@ export default function OrderManagementView({
   const [statusFilter, setStatusFilter] = useState<string>("All");
   const [showAddForm, setShowAddForm] = useState(false);
   const [selectedInvoiceOrder, setSelectedInvoiceOrder] = useState<Order | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const downloadPDFInvoice = () => {
     if (!selectedInvoiceOrder) return;
@@ -473,6 +474,32 @@ export default function OrderManagementView({
     onRefreshData();
   };
 
+  const handleDeleteOrder = (orderId: string) => {
+    const currentOrders = LocalDB.getOrders();
+    const orderToDelete = currentOrders.find(o => o.orderId === orderId);
+    if (!orderToDelete) return;
+
+    // Delete the order
+    const updatedOrders = currentOrders.filter(o => o.orderId !== orderId);
+    LocalDB.setOrders(updatedOrders);
+
+    // Delete corresponding deliveries
+    const currentDeliveries = LocalDB.getDeliveries();
+    const updatedDeliveries = currentDeliveries.filter(d => d.orderId !== orderId);
+    LocalDB.setDeliveries(updatedDeliveries);
+
+    // Add audit log
+    LocalDB.appendLog(
+      currentUser.username,
+      `Permanently deleted customer order ${orderToDelete.orderRefNo} and removed corresponding dispatch route`,
+      "ORDER"
+    );
+
+    // Clear delete confirmation state
+    setDeleteConfirmId(null);
+    onRefreshData();
+  };
+
   return (
     <div className="space-y-6">
       
@@ -660,6 +687,35 @@ export default function OrderManagementView({
                                 </div>
                               </div>
                             </div>
+                          )}
+
+                          {/* Delete Order with Inline Confirmation */}
+                          {deleteConfirmId === order.orderId ? (
+                            <div className="flex items-center gap-1.5 bg-rose-50 border border-rose-200 rounded-lg p-1 animate-pulse">
+                              <button
+                                onClick={() => handleDeleteOrder(order.orderId)}
+                                className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] transition-all cursor-pointer"
+                              >
+                                Delete
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(null)}
+                                className="px-2 py-1 rounded bg-slate-200 hover:bg-slate-350 text-slate-700 font-bold text-[10px] transition-all cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setDeleteConfirmId(order.orderId);
+                              }}
+                              className="p-1 px-1.5 py-1 px-2.5 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 transition-all text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                              title="Delete Order (To prevent database full)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                              <span>Delete</span>
+                            </button>
                           )}
                         </div>
                       </td>

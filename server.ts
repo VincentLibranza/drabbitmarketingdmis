@@ -344,9 +344,18 @@ async function initDb() {
     }
 
     console.log("Turso Database initialized perfectly!");
-  } catch (err) {
-    console.error("Failed to initialize database tables/seeds:", err);
-    throw err; // Rethrow so caller knows initialization failed
+  } catch (err: any) {
+    console.error("Failed to initialize remote database tables/seeds:", err);
+    if (dbUrl !== "file:local.db") {
+      console.warn("⚠️ Remote database connection failed (e.g. 401 Unauthorized or network error). Falling back to local file database: file:local.db...");
+      dbClientInstance = null;
+      dbUrl = "file:local.db";
+      dbAuthToken = undefined;
+      // Re-run the initialization with the local SQLite database file
+      await initDb();
+    } else {
+      throw err; // Rethrow if even the local file initialization fails
+    }
   }
 }
 
@@ -750,7 +759,11 @@ app.post(["/api/db/reset", "/db/reset"], async (req, res) => {
 // --- SERVER STARTUP WRAPPER ---
 async function startServer() {
   // Initialize SQLite/Turso tables and seeds sequentially on start
-  await initDb();
+  try {
+    await initDb();
+  } catch (err: any) {
+    console.error("⚠️ Database initialization failed at startup, but proceeding anyway to guarantee server listening:", err);
+  }
 
   // --- VITE MIDDLEWARE / STATIC SERVING CONFIG ---
   if (process.env.NODE_ENV !== "production") {

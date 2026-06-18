@@ -211,8 +211,12 @@ async function initSchema() {
     }
   ];
 
-  for (const table of tablesToVerify) {
-    await checkAndSelfHealTable(table.name, table.sql, table.columns);
+  try {
+    for (const table of tablesToVerify) {
+      await checkAndSelfHealTable(table.name, table.sql, table.columns);
+    }
+  } catch (err: any) {
+    console.error("Failed to verify/self-heal tables in initSchema:", err);
   }
 }
 
