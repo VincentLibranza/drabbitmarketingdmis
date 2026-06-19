@@ -41,6 +41,8 @@ import ComplaintsView from "./components/ComplaintsView";
 import UserManagementView from "./components/UserManagementView";
 import AuditView from "./components/AuditView";
 import DevControlView from "./components/DevControlView";
+// @ts-ignore
+import drabbitLogo from "./assets/images/drabbit_logo_1781809598838.jpg";
 
 export default function App() {
   
@@ -371,7 +373,7 @@ export default function App() {
 
               <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center border border-slate-150 shadow-sm overflow-hidden shrink-0">
                 <img 
-                  src="/src/assets/images/drabbit_logo_1781809598838.jpg" 
+                  src={drabbitLogo} 
                   alt="Drabbit Logo" 
                   className="h-full w-full object-cover"
                   referrerPolicy="no-referrer"
@@ -474,7 +476,7 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center border border-slate-150 overflow-hidden shrink-0">
                       <img 
-                        src="/src/assets/images/drabbit_logo_1781809598838.jpg" 
+                        src={drabbitLogo} 
                         alt="Drabbit Logo" 
                         className="h-full w-full object-cover"
                         referrerPolicy="no-referrer"

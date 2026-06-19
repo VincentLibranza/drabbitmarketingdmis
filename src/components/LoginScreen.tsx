@@ -8,6 +8,8 @@ import { motion } from "motion/react";
 import { ShieldAlert, LogIn, Sparkles, AlertCircle, ArrowLeft, UserPlus, CheckCircle2 } from "lucide-react";
 import { User, UserRole, UserStatus } from "../types";
 import { LocalDB } from "../services/db";
+// @ts-ignore
+import drabbitLogo from "../assets/images/drabbit_logo_1781809598838.jpg";
 
 interface LoginScreenProps {
   onLoginSuccess: (user: User) => void;
@@ -120,7 +122,7 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
         <div className="flex justify-center mb-4">
           <div className="h-16 w-16 rounded-2xl bg-white border border-slate-150 flex items-center justify-center shadow-lg overflow-hidden shrink-0">
             <img 
-              src="/src/assets/images/drabbit_logo_1781809598838.jpg" 
+              src={drabbitLogo} 
               alt="Drabbit Logo" 
               className="h-full w-full object-cover"
               referrerPolicy="no-referrer"
