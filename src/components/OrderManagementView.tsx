@@ -61,7 +61,8 @@ export default function OrderManagementView({
     const clientName = client?.customerName || "Walk-In buyer";
     const clientAddress = client?.address || "Davao City Local Customer";
     const clientPhone = client?.contact || "N/A";
-    const clientTin = client?.tin || "Not Registered";
+    const clientTin = client?.tin || "000-000-000-000";
+    const businessStyle = clientName.toUpperCase().includes("HOTEL") ? "HOTEL" : "RETAILER";
 
     const doc = new jsPDF({
       orientation: "portrait",
@@ -69,146 +70,355 @@ export default function OrderManagementView({
       format: "a4"
     });
 
-    const primaryColor = [79, 70, 229]; // Indigo-600
-    const darkColor = [15, 23, 42]; // Slate-900
-    const lightGrey = [100, 116, 139]; // Slate-500
-    const lineGrey = [226, 232, 240]; // Slate-200
+    const forestGreen = [27, 77, 62];
+    const emeraldAccent = [21, 128, 61];
+    const plainWhite = [255, 255, 255];
+    const tableHeaderBg = [156, 220, 174];
+    const boxInnerBg = [238, 250, 242];
 
+    // 1. Draw carbon receipt paper background (beautiful sage mint tint #ebf8f0)
+    doc.setFillColor(235, 248, 240);
+    doc.rect(10, 10, 190, 277, "F");
+
+    // 2. Beautiful layout borders
+    doc.setDrawColor(forestGreen[0], forestGreen[1], forestGreen[2]);
+    doc.setLineWidth(1.0);
+    doc.rect(13, 13, 184, 271, "S");
+    doc.setLineWidth(0.3);
+    doc.rect(14.5, 14.5, 181, 268, "S");
+
+    // 3. Header branding
+    // Company Header Name
     doc.setFont("Helvetica", "bold");
-    doc.setFontSize(22);
-    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
-    doc.text("DRABBIT MARKETING", 20, 25);
+    doc.setFontSize(19);
+    doc.setTextColor(forestGreen[0], forestGreen[1], forestGreen[2]);
+    doc.text("DRABBIT MARKETING", 18, 26);
 
+    // Supply & Description
     doc.setFont("Helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text("SUPPLY & DISTRIBUTION CENTER", 20, 31);
-
-    doc.setFont("Helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    doc.text("Plainview Village KM.10 Sasa, Davao City", 20, 37);
-    doc.text("Proprietor: Rufino N. Libranza Jr.", 20, 42);
+    doc.text("SUPPLY & DISTRIBUTION CENTER", 18, 31);
 
+    // Specific Davao Details
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(50, 70, 60);
+    doc.text("KM. 10 Sasa, Davao City, Philippines", 18, 35);
+    doc.text("VAT Reg. TIN: 168-925-306-00000", 18, 39);
+
+    // Charge Invoice Header
     doc.setFont("Helvetica", "bold");
-    doc.setFontSize(20);
-    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
-    doc.text("INVOICE", 190, 25, { align: "right" });
+    doc.setFontSize(17);
+    doc.setTextColor(forestGreen[0], forestGreen[1], forestGreen[2]);
+    doc.text("CHARGE INVOICE", 192, 26, { align: "right" });
 
-    doc.setFont("Helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    doc.text(`Ref: ${selectedInvoiceOrder.orderRefNo}`, 190, 31, { align: "right" });
-
-    doc.setFont("Helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text(`PAYMENT STATUS: ${selectedInvoiceOrder.paymentStatus.toUpperCase()}`, 190, 37, { align: "right" });
-
-    doc.setDrawColor(lineGrey[0], lineGrey[1], lineGrey[2]);
+    // Underline charge invoice double line
     doc.setLineWidth(0.5);
-    doc.line(20, 48, 190, 48);
+    doc.line(148, 28, 192, 28);
+    doc.line(148, 28.8, 192, 28.8);
 
-    doc.setFont("Helvetica", "bold");
-    doc.setFontSize(9);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    doc.text("BILLED CLIENT:", 20, 58);
-    doc.text("TRANSACTION DETAILS:", 110, 58);
+    // Invoice Number Box
+    doc.setFillColor(plainWhite[0], plainWhite[1], plainWhite[2]);
+    doc.setLineWidth(0.3);
+    doc.rect(145, 33, 47, 8, "FD");
 
-    doc.setFont("Helvetica", "bold");
+    doc.setFont("Courier", "bold");
     doc.setFontSize(11);
-    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
-    doc.text(clientName, 20, 64);
+    doc.setTextColor(emeraldAccent[0], emeraldAccent[1], emeraldAccent[2]);
+    const cleanRefNo = selectedInvoiceOrder.orderRefNo.replace(/\D/g, "") ? selectedInvoiceOrder.orderRefNo.replace(/\D/g, "") : "1003";
+    doc.text(`No. ${cleanRefNo}`, 168.5, 38.5, { align: "center" });
 
-    doc.setFont("Helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    
-    const addressLines = doc.splitTextToSize(`Address: ${clientAddress}`, 80);
-    doc.text(addressLines, 20, 70);
-    
-    const contactY = 70 + (addressLines.length * 4.5);
-    doc.text(`Phone: ${clientPhone}`, 20, contactY);
-    
+    // Dashed separator line
+    doc.setLineDashPattern([2, 1.5], 0);
+    doc.setLineWidth(0.4);
+    doc.setDrawColor(forestGreen[0], forestGreen[1], forestGreen[2]);
+    doc.line(18, 44, 192, 44);
+    doc.setLineDashPattern([], 0); // reset to solid
+
+    // 4. Customer Information Area (with dotted/dashed underline slots)
     doc.setFont("Helvetica", "bold");
-    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
-    doc.text(`TIN: ${clientTin}`, 20, contactY + 5);
+    doc.setFontSize(8);
+    doc.setTextColor(20, 30, 25);
 
-    doc.setFont("Helvetica", "normal");
-    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+    // Label coordinates
+    // Row 1 (Y = 51)
+    doc.text("CHARGED TO:", 18, 51);
+    doc.setFont("Helvetica", "bold");
     doc.setFontSize(9.5);
-    doc.text(`Date Issued: ${new Date(selectedInvoiceOrder.orderDate).toLocaleDateString()}`, 110, 64);
-    doc.text(`Due Date: ${selectedInvoiceOrder.dueDate}`, 110, 70);
-    doc.text(`Logistics: ${selectedInvoiceOrder.status}`, 110, 76);
-
-    const tableStartY = Math.max(contactY + 12, 84);
-    doc.line(20, tableStartY, 190, tableStartY);
-
-    doc.setFillColor(248, 250, 252);
-    doc.rect(20, tableStartY + 2, 170, 8, "F");
+    doc.text(clientName, 43, 51);
     
     doc.setFont("Helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    doc.text("PRODUCT DESCRIPTION", 23, tableStartY + 7.5);
-    doc.text("QTY PURCHASED", 110, tableStartY + 7.5, { align: "center" });
-    doc.text("UNIT PRICE", 150, tableStartY + 7.5, { align: "right" });
-    doc.text("LINE TOTAL", 185, tableStartY + 7.5, { align: "right" });
+    doc.setFontSize(8);
+    doc.text("DATE:", 145, 51);
+    doc.setFont("Courier", "bold");
+    doc.setFontSize(9);
+    const dateFormatted = new Date(selectedInvoiceOrder.orderDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }).toUpperCase();
+    doc.text(dateFormatted, 156, 51);
 
-    let currentY = tableStartY + 15;
+    // Row 2 (Y = 58)
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("ADDRESS:", 18, 58);
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(9);
-    doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
+    doc.text(clientAddress, 36, 58);
+    
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("TERMS:", 145, 58);
+    doc.setFont("Courier", "bold");
+    doc.text("30 DAYS", 159, 58);
 
-    selectedInvoiceOrder.items.forEach((item) => {
-      const prod = products.find(p => p.productId === item.productId);
-      const prodName = prod?.productName || "Packaging Item";
-      
-      doc.setFont("Helvetica", "bold");
-      doc.text(prodName, 23, currentY);
-      
-      doc.setFont("Helvetica", "normal");
-      doc.text(`${item.quantity} units`, 110, currentY, { align: "center" });
-      doc.text(`P${item.unitPrice.toFixed(2)}`, 150, currentY, { align: "right" });
-      
-      doc.setFont("Helvetica", "bold");
-      doc.text(`P${(item.quantity * item.unitPrice).toFixed(2)}`, 185, currentY, { align: "right" });
+    // Row 3 (Y = 65)
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("TIN:", 18, 65);
+    doc.setFont("Courier", "normal");
+    doc.setFontSize(8.5);
+    doc.text(clientTin, 26, 65);
 
-      currentY += 8;
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("BUSINESS STYLE:", 75, 65);
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text(businessStyle, 103, 65);
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("P.O. NO.:", 145, 65);
+    doc.setFont("Courier", "normal");
+    doc.text("N/A", 160, 65);
+
+    // Draw the aesthetic lined paper underlines
+    doc.setLineDashPattern([0.5, 1], 0);
+    doc.setLineWidth(0.25);
+    doc.setDrawColor(forestGreen[0], forestGreen[1], forestGreen[2]);
+    // Row 1 lines
+    doc.line(41, 52, 140, 52);
+    doc.line(155, 52, 192, 52);
+    // Row 2 lines
+    doc.line(34, 59, 140, 59);
+    doc.line(157, 59, 192, 59);
+    // Row 3 lines
+    doc.line(25, 66, 70, 66);
+    doc.line(100, 66, 140, 66);
+    doc.line(159, 66, 192, 66);
+    doc.setLineDashPattern([], 0); // reset to solid
+
+    // 5. Grid Table for Purchased Items
+    const tableX = 18;
+    const tableY = 72;
+    const tableWidth = 174;
+    const tableHeight = 90;
+    
+    // Draw table background and border
+    doc.setFillColor(boxInnerBg[0], boxInnerBg[1], boxInnerBg[2]);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.4);
+    doc.rect(tableX, tableY, tableWidth, tableHeight, "FD");
+
+    // Header row fill and border
+    doc.setFillColor(tableHeaderBg[0], tableHeaderBg[1], tableHeaderBg[2]);
+    doc.rect(tableX, tableY, tableWidth, 6.5, "FD");
+
+    // Vertical grid lines
+    const colEnds = [31, 45, 127, 153]; // columns line up nicely
+    colEnds.forEach(cx => {
+      doc.line(cx, tableY, cx, tableY + tableHeight);
     });
 
-    doc.line(20, currentY, 190, currentY);
-    currentY += 6;
+    // Horizontal header dividing line
+    doc.line(tableX, tableY + 6.5, tableX + tableWidth, tableY + 6.5);
+
+    // Header Labels (matches the exact headers from web-dashboard receipt)
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text("QUANTITY", 24.5, tableY + 4.5, { align: "center" });
+    doc.text("UNIT", 38, tableY + 4.5, { align: "center" });
+    doc.text("DESCRIPTION", 48, tableY + 4.5);
+    doc.text("UNIT PRICE", 140, tableY + 4.5, { align: "center" });
+    doc.text("AMOUNT", 172.5, tableY + 4.5, { align: "center" });
+
+    // Item rendering logic with fallbacks
+    const activeItems = (selectedInvoiceOrder.items && selectedInvoiceOrder.items.length > 0 
+      ? selectedInvoiceOrder.items 
+      : [{
+          itemId: "fallback-item",
+          orderId: selectedInvoiceOrder.orderId,
+          productId: "fallback-prod",
+          quantity: 1,
+          unitPrice: selectedInvoiceOrder.totalAmount
+        }]
+    );
+
+    // 12 empty row grids for visual weight symmetry
+    const rowHeight = 6.95;
+    for (let r = 1; r <= 12; r++) {
+      const lineY = tableY + 6.5 + (r * rowHeight);
+      doc.setLineWidth(0.2);
+      doc.setDrawColor(180, 180, 180);
+      doc.line(tableX, lineY, tableX + tableWidth, lineY);
+    }
+
+    // Render text data inside the table slots
+    activeItems.forEach((item, idx) => {
+      if (idx >= 12) return; // grid bounds protect
+      const slotY = tableY + 6.5 + (idx * rowHeight) + 5;
+      
+      const prod = products.find(p => p.productId === item.productId);
+      const isClingWrap = prod?.productName?.toLowerCase().includes("cling") || prod?.productName?.toLowerCase().includes("wrap");
+      const unitStr = isClingWrap ? "ROLL" : "PCS";
+      const prodDescription = prod?.productName || "General Cargo Logistics / Sasa Supplies";
+
+      doc.setFont("Helvetica", "bold");
+      doc.setFontSize(8.5);
+      doc.setTextColor(0, 0, 0);
+      
+      // Qty
+      doc.text(String(item.quantity), 24.5, slotY, { align: "center" });
+      
+      // Unit
+      doc.setFont("Courier", "bold");
+      doc.text(unitStr, 38, slotY, { align: "center" });
+      
+      // Description
+      doc.setFont("Helvetica", "bold");
+      doc.text(prodDescription, 48, slotY);
+      
+      // Unit Price
+      doc.setFont("Courier", "bold");
+      doc.text(`P${item.unitPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 151, slotY, { align: "right" });
+      
+      // Amount
+      doc.text(`P${(item.quantity * item.unitPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 190, slotY, { align: "right" });
+    });
+
+    // Outer table border strengthening to prevent thin edges
+    doc.setLineWidth(0.4);
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(tableX, tableY, tableWidth, tableHeight, "S");
+
+    // 6. BOTTOM LAYOUT (Left tax details / Remarks + Right Calculations / Signatures)
+    const summaryY = tableY + tableHeight + 6;
+    
+    // Left Box 1: Tax Details
+    doc.setFillColor(boxInnerBg[0], boxInnerBg[1], boxInnerBg[2]);
+    doc.rect(18, summaryY, 82, 36, "FD");
+    
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(8);
+    doc.text("TAX DETAILS", 21, summaryY + 5);
+    doc.text("VALUE", 95, summaryY + 5, { align: "right" });
+    
+    doc.setLineWidth(0.35);
+    doc.line(18, summaryY + 7.5, 100, summaryY + 7.5);
 
     const subtotalVal = selectedInvoiceOrder.totalAmount / 1.12;
     const vatVal = (selectedInvoiceOrder.totalAmount / 1.12) * 0.12;
+    
+    doc.setFont("Courier", "bold");
+    doc.setFontSize(8.5);
+    doc.text("Vatable Sales", 21, summaryY + 13);
+    doc.text(`P${subtotalVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 95, summaryY + 13, { align: "right" });
 
-    doc.setFont("Helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    doc.text("Vatable Sales:", 135, currentY, { align: "right" });
-    doc.text(`P${subtotalVal.toFixed(2)}`, 185, currentY, { align: "right" });
+    doc.text("VAT-Exempt Sales", 21, summaryY + 19);
+    doc.text("-", 95, summaryY + 19, { align: "right" });
 
-    currentY += 5;
-    doc.text("Value Added Tax (12% VAT):", 135, currentY, { align: "right" });
-    doc.text(`P${vatVal.toFixed(2)}`, 185, currentY, { align: "right" });
+    doc.text("Zero Rated Sales", 21, summaryY + 25);
+    doc.text("-", 95, summaryY + 25, { align: "right" });
 
-    currentY += 7;
+    doc.line(18, summaryY + 28, 100, summaryY + 28);
+    
+    doc.text("VAT Amount", 21, summaryY + 33);
+    doc.text(`P${vatVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 95, summaryY + 33, { align: "right" });
+
+    // Left Box 2: Remarks
+    doc.rect(18, summaryY + 41, 82, 33, "FD");
     doc.setFont("Helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-    doc.text("TOTAL PAYABLE:", 135, currentY, { align: "right" });
-    doc.text(`P${selectedInvoiceOrder.totalAmount.toFixed(2)}`, 185, currentY, { align: "right" });
-
-    currentY = Math.max(currentY + 20, 260);
-    doc.line(20, currentY, 190, currentY);
+    doc.setFontSize(8);
+    doc.text("REMARKS:", 21, summaryY + 46);
     
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(8);
-    doc.setTextColor(lightGrey[0], lightGrey[1], lightGrey[2]);
-    doc.text("Thank you for buying packaging supplies from Drabbit Marketing!", 105, currentY + 5, { align: "center" });
-    doc.text("Invoices are automatically generated by the Drabbit DMIS server in accordance with SAD regulations.", 105, currentY + 8.5, { align: "center" });
-    doc.text("Plainview Village KM.10 Sasa, Davao City, Philippines", 105, currentY + 12, { align: "center" });
+    const remarksMsg = selectedInvoiceOrder.paymentStatus === PaymentStatus.Paid 
+      ? "PAYMENT SECURED IN FULL — THANK YOU FOR YOUR BUSINESS." 
+      : "TERMS: 30 DAYS DISPATCHED LOGISTICS CARRIER CORRESPONDENCE.";
+    const remarksLines = doc.splitTextToSize(remarksMsg, 76);
+    doc.text(remarksLines, 21, summaryY + 51);
+
+    // Right Box 1: Total Computations
+    doc.setFillColor(boxInnerBg[0], boxInnerBg[1], boxInnerBg[2]);
+    doc.rect(106, summaryY, 86, 39, "FD");
+
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.text("Total Sales (VAT Inc.)", 109, summaryY + 6);
+    doc.setFont("Courier", "bold");
+    doc.text(`P${selectedInvoiceOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189, summaryY + 6, { align: "right" });
+
+    doc.setFont("Helvetica", "normal");
+    doc.text("Less: VAT (12%)", 109, summaryY + 12);
+    doc.text(`-P${vatVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189, summaryY + 12, { align: "right" });
+
+    doc.text("Amount Net of VAT", 109, summaryY + 18);
+    doc.text(`P${subtotalVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189, summaryY + 18, { align: "right" });
+
+    doc.text("Less: SC/PWD Discount", 109, summaryY + 24);
+    doc.text("-", 189, summaryY + 24, { align: "right" });
+
+    doc.setLineWidth(0.4);
+    doc.line(106, summaryY + 27, 192, summaryY + 27);
+
+    doc.setFont("Helvetica", "bold");
+    doc.text("Amount Due", 109, summaryY + 32);
+    doc.setFont("Courier", "bold");
+    doc.text(`P${selectedInvoiceOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189, summaryY + 32, { align: "right" });
+
+    // GRAND TOTAL OVERLAY
+    doc.setFillColor(tableHeaderBg[0], tableHeaderBg[1], tableHeaderBg[2]); // soft emerald green background banner
+    doc.rect(106, summaryY + 39, 86, 10, "FD");
+    
+    doc.setTextColor(forestGreen[0], forestGreen[1], forestGreen[2]);
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("TOTAL AMOUNT DUE", 109, summaryY + 45.5);
+    
+    doc.setFont("Courier", "bold");
+    doc.setFontSize(11);
+    doc.text(`P${selectedInvoiceOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 189, summaryY + 45.5, { align: "right" });
+
+    // Underline totals double
+    doc.line(152, summaryY + 47, 189, summaryY + 47);
+    doc.line(152, summaryY + 47.6, 189, summaryY + 47.6);
+
+    // Right Box 2: Official Signature Acknowledgement
+    doc.setTextColor(0, 0, 0);
+    doc.setFillColor(boxInnerBg[0], boxInnerBg[1], boxInnerBg[2]);
+    doc.rect(106, summaryY + 54, 86, 20, "FD");
+
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(6.2);
+    doc.text("Received the above mentioned GOODS in good order and condition.", 149, summaryY + 58, { align: "center" });
+
+    // Signature Line
+    doc.setLineWidth(0.3);
+    doc.line(116, summaryY + 68, 182, summaryY + 68);
+
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(6.5);
+    doc.text("By: Authorized Representative Signature", 149, summaryY + 71, { align: "center" });
+
+    // 7. Footer metadata (outside the main double border frame at physical print sheet bottom)
+    doc.setFont("Courier", "normal");
+    doc.setFontSize(6.5);
+    doc.setTextColor(80, 95, 85);
+    doc.text("50 Bklts (3x) 2701-3200 — BIR Authority to Print No. 132AU20220000008286", 18, summaryY + 79);
+    doc.text("Date issued: 10/13/2022 — POJE PRINTING PRESS — Km. 10 Sasa, Davao City", 18, summaryY + 82);
+
+    doc.text("THIS DOCUMENT IS NOT VALID FOR CLAIM OF INPUT TAXES", 192, summaryY + 79, { align: "right" });
+    doc.text("DAVAO SASA DIVISION — DMIS SYSTEM PORTAL LOGISTICS", 192, summaryY + 82, { align: "right" });
 
     doc.save(`Invoice_${selectedInvoiceOrder.orderRefNo}.pdf`);
   };
