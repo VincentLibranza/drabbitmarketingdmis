@@ -80,6 +80,7 @@ export interface Invoice {
   totalAmount: number;
   paymentStatus: PaymentStatus;
   dueDate: string;
+  orderSnapshot?: Order;
 }
 
 export enum DeliveryStatus {

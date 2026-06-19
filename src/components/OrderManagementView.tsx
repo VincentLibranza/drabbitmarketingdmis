@@ -394,7 +394,8 @@ export default function OrderManagementView({
       invoiceDate: newOrder.orderDate.split("T")[0],
       totalAmount: newOrder.totalAmount,
       paymentStatus: newOrder.paymentStatus,
-      dueDate: newOrder.dueDate
+      dueDate: newOrder.dueDate,
+      orderSnapshot: newOrder
     };
     const currentInvoices = LocalDB.getInvoices();
     LocalDB.setInvoices([newInvoice, ...currentInvoices]);
@@ -514,9 +515,14 @@ export default function OrderManagementView({
     const updatedDeliveries = currentDeliveries.filter(d => d.orderId !== orderId);
     LocalDB.setDeliveries(updatedDeliveries);
 
-    // Delete corresponding invoices
+    // Do NOT delete corresponding invoices. Instead, attach an orderSnapshot of the deleted order details.
     const currentInvoices = LocalDB.getInvoices();
-    const updatedInvoices = currentInvoices.filter(i => i.orderId !== orderId);
+    const updatedInvoices = currentInvoices.map(i => {
+      if (i.orderId === orderId) {
+        return { ...i, orderSnapshot: orderToDelete };
+      }
+      return i;
+    });
     LocalDB.setInvoices(updatedInvoices);
 
     // Add audit log
@@ -822,7 +828,18 @@ export default function OrderManagementView({
                   </tr>
                 ) : (
                   LocalDB.getInvoices().map((inv) => {
-                    const linkedOrder = orders.find(o => o.orderId === inv.orderId);
+                    const fallbackOrder: Order = {
+                      orderId: inv.orderId,
+                      orderRefNo: `REF-${inv.invoiceId.replace("INV-", "")}`,
+                      customerId: "deleted",
+                      orderDate: inv.invoiceDate + "T00:00:00.000Z",
+                      dueDate: inv.dueDate,
+                      status: "Delivered" as any,
+                      paymentStatus: inv.paymentStatus,
+                      totalAmount: inv.totalAmount,
+                      items: []
+                    };
+                    const linkedOrder = orders.find(o => o.orderId === inv.orderId) || inv.orderSnapshot || fallbackOrder;
                     return (
                       <tr key={inv.invoiceId} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
                         <td className="py-4 px-6 font-mono font-medium text-slate-900">{inv.invoiceId}</td>
@@ -855,18 +872,14 @@ export default function OrderManagementView({
                           {inv.dueDate || "N/A"}
                         </td>
                         <td className="py-4 px-6 text-center">
-                          {linkedOrder ? (
-                            <button
-                              onClick={() => setSelectedInvoiceOrder(linkedOrder)}
-                              className="p-1 px-3.5 py-1.5 rounded-xl border border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
-                              title="Print and preview invoice"
-                            >
-                              <Printer className="w-3.5 h-3.5" />
-                              <span>View Invoice PDF</span>
-                            </button>
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">Order not found</span>
-                          )}
+                          <button
+                            onClick={() => setSelectedInvoiceOrder(linkedOrder)}
+                            className="p-1 px-3.5 py-1.5 rounded-xl border border-indigo-100 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer"
+                            title="Print and preview invoice"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>View Invoice PDF</span>
+                          </button>
                         </td>
                       </tr>
                     );
