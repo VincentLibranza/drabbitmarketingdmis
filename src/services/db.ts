@@ -455,7 +455,20 @@ export class LocalDB {
   }
 
   static getComplaints(): Complaint[] {
-    return this.get<Complaint[]>("complaints", initialComplaints);
+    const list = this.get<Complaint[]>("complaints", initialComplaints);
+    let changed = false;
+    const updated = list.map(c => {
+      if (c.resolution && c.resolution.trim() !== "" && c.status !== ComplaintStatus.Resolved) {
+        changed = true;
+        return { ...c, status: ComplaintStatus.Resolved };
+      }
+      return c;
+    });
+    if (changed) {
+      this.setComplaints(updated, false);
+      return updated;
+    }
+    return list;
   }
   static setComplaints(complaints: Complaint[], skipSync = false): void {
     this.set("complaints", complaints, skipSync);
