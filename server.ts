@@ -557,12 +557,13 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     
     const invoices = invoicesRes.rows.map((row: any) => {
       let parsedSnapshot = undefined;
+      const rawSnapshot = row.orderSnapshot || row.ordersnapshot;
       try {
-        if (row.orderSnapshot) {
-          if (typeof row.orderSnapshot === "string") {
-            parsedSnapshot = JSON.parse(row.orderSnapshot);
+        if (rawSnapshot) {
+          if (typeof rawSnapshot === "string") {
+            parsedSnapshot = JSON.parse(rawSnapshot);
           } else {
-            parsedSnapshot = row.orderSnapshot;
+            parsedSnapshot = rawSnapshot;
           }
         }
       } catch (e: any) {
@@ -775,7 +776,24 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
 
     if (statements.length > 0) {
       console.log(`[DB Push Proxy] Calling db.batch with ${statements.length} sql statements for table "${table}"...`);
-      await db.batch(statements, "write");
+      try {
+        await db.batch(statements, "write");
+      } catch (batchErr: any) {
+        const errMsg = batchErr.message || String(batchErr);
+        if (table === "invoices" && (errMsg.includes("no such column: orderSnapshot") || errMsg.includes("no such column: ordersnapshot"))) {
+          console.warn("[DB Push Proxy] Column orderSnapshot doesn't exist on remote Turso. Initiating live migration...");
+          try {
+            await db.execute("ALTER TABLE invoices ADD COLUMN orderSnapshot TEXT");
+            console.log("[DB Push Proxy] Live column migration successful! Retrying batch push...");
+            await db.batch(statements, "write");
+          } catch (migrationErr: any) {
+            console.error("[DB Push Proxy] Live migration and retry failed:", migrationErr.message || migrationErr);
+            throw batchErr;
+          }
+        } else {
+          throw batchErr;
+        }
+      }
       console.log(`[DB Push Proxy] Batch completed successfully! Table "${table}" has been fully replaced in cloud Turso.`);
     } else {
       console.log(`[DB Push Proxy] Empty rows array, completed zero-operation for table "${table}".`);

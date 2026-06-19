@@ -212,13 +212,22 @@ function normalizeRow(table: string, row: any): any {
   }
 
   if (table === "invoices") {
+    let snapshot = getVal("orderSnapshot", ["ordersnapshot", "OrderSnapshot"]);
+    if (snapshot && typeof snapshot === "string") {
+      try {
+        snapshot = JSON.parse(snapshot);
+      } catch (e) {
+        // Safe dismiss
+      }
+    }
     return {
       invoiceId: getVal("invoiceId", ["invoiceid", "InvoiceID"]),
       orderId: getVal("orderId", ["orderid", "OrderID"]),
       invoiceDate: getVal("invoiceDate", ["invoicedate", "InvoiceDate"]),
       totalAmount: Number(getVal("totalAmount", ["totalamount", "TotalAmount"]) ?? 0),
       paymentStatus: getVal("paymentStatus", ["paymentstatus", "PaymentStatus"]),
-      dueDate: getVal("dueDate", ["duedate", "DueDate"])
+      dueDate: getVal("dueDate", ["duedate", "DueDate"]),
+      orderSnapshot: snapshot || undefined,
     };
   }
 
@@ -471,6 +480,17 @@ export class LocalDB {
           orderSnapshot: o
         });
         changed = true;
+      }
+    });
+
+    // Back-fill missing orderSnapshots for existing invoices where the order still exists
+    updatedInvoices.forEach(inv => {
+      if (!inv.orderSnapshot && inv.orderId) {
+        const matchingOrder = orders.find(o => o.orderId === inv.orderId);
+        if (matchingOrder) {
+          inv.orderSnapshot = matchingOrder;
+          changed = true;
+        }
       }
     });
 
