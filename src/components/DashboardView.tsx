@@ -87,7 +87,7 @@ export default function DashboardView({
   const pendingOrdersCount = orders.filter(o => o.status === OrderStatus.Pending).length;
   const dispatchingOrdersCount = orders.filter(o => o.status === OrderStatus.Dispatched).length;
   const lowStockItems = products.filter(p => p.stockQuantity <= p.reorderThreshold);
-  const openComplaintsCount = complaints.filter(c => c.status !== "Resolved").length;
+  const openComplaintsCount = complaints.filter(c => c.status !== "Resolved" && !(c.resolution && c.resolution.trim() !== "")).length;
 
   // 2. Chart Data 1: Sales trends over time (from orders list)
   const sortedOrdersByDate = [...orders].sort((a,b) => new Date(a.orderDate).getTime() - new Date(b.orderDate).getTime());
