@@ -105,12 +105,13 @@ export default function ComplaintsView({
 
     if (editingComplaint) {
       // Edit Mode
+      const finalStatus = (formResolution && formResolution.trim() !== "") ? ComplaintStatus.Resolved : formStatus;
       const updated = currentLocalComplaints.map(compl => {
         if (compl.complaintId === editingComplaint.complaintId) {
           
           LocalDB.appendLog(
             currentUser.username, 
-            `Updated dispute claim case ${compl.complaintId} (Status set to: ${formStatus})`, 
+            `Updated dispute claim case ${compl.complaintId} (Status set to: ${finalStatus})`, 
             "COMPLAINT"
           );
 
@@ -119,7 +120,7 @@ export default function ComplaintsView({
             customerId: formCustomerId,
             productId: formProductId || undefined,
             description: formDesc,
-            status: formStatus,
+            status: finalStatus,
             resolution: formResolution || undefined
           };
         }
@@ -212,28 +213,30 @@ export default function ComplaintsView({
           filteredComplaints.map(compl => {
             const customer = customers.find(cust => cust.customerId === compl.customerId);
             const product = products.find(prod => prod.productId === compl.productId);
+            const isResolved = compl.status === ComplaintStatus.Resolved || (compl.resolution && compl.resolution.trim() !== "");
+            const displayStatus = isResolved ? ComplaintStatus.Resolved : compl.status;
             
             return (
               <motion.div
                 layout
                 key={compl.complaintId}
                 className={`bg-white border rounded-2xl p-5 shadow-sm space-y-4 hover:border-slate-200 transition-all ${
-                  compl.status === ComplaintStatus.Resolved ? "border-slate-100 bg-slate-50/25" : "border-rose-100"
+                  displayStatus === ComplaintStatus.Resolved ? "border-slate-100 bg-slate-50/25" : "border-rose-100"
                 }`}
               >
                 {/* Header info */}
                 <div className="flex justify-between items-start">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                    compl.status === ComplaintStatus.Resolved ? "bg-emerald-50 text-emerald-850" :
-                    compl.status === ComplaintStatus.InProgress ? "bg-amber-50 text-amber-850" :
+                    displayStatus === ComplaintStatus.Resolved ? "bg-emerald-50 text-emerald-850" :
+                    displayStatus === ComplaintStatus.InProgress ? "bg-amber-50 text-amber-850" :
                     "bg-rose-50 text-rose-850"
                   }`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${
-                      compl.status === ComplaintStatus.Resolved ? "bg-emerald-500" :
-                      compl.status === ComplaintStatus.InProgress ? "bg-amber-500" :
+                      displayStatus === ComplaintStatus.Resolved ? "bg-emerald-500" :
+                      displayStatus === ComplaintStatus.InProgress ? "bg-amber-500" :
                       "bg-rose-500"
                     }`} />
-                    {compl.status}
+                    {displayStatus}
                   </span>
 
                   <span className="text-[10px] text-slate-400 font-mono">Case Code: {compl.complaintId}</span>
@@ -278,7 +281,7 @@ export default function ComplaintsView({
                     onClick={() => handleStartEdit(compl)}
                     className="p-1 px-3.5 rounded-lg border border-slate-200 text-slate-700 hover:text-indigo-650 hover:bg-slate-50 hover:border-indigo-150 transition-all font-bold cursor-pointer text-[11px]"
                   >
-                    Resolve ticket
+                    {displayStatus === ComplaintStatus.Resolved ? "Manage ticket" : "Resolve ticket"}
                   </button>
                 </div>
 
@@ -393,7 +396,13 @@ export default function ComplaintsView({
                         rows={3}
                         placeholder="Describe replacement details, credit memo info, or adjustments applied..."
                         value={formResolution}
-                        onChange={(e) => setFormResolution(e.target.value)}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormResolution(val);
+                          if (val.trim() !== "" && formStatus !== ComplaintStatus.Resolved) {
+                            setFormStatus(ComplaintStatus.Resolved);
+                          }
+                        }}
                         className="block w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-slate-900 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-650 text-xs"
                       />
                     </div>
