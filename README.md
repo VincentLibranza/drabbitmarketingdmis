@@ -80,12 +80,6 @@ The system replaces fragmented manual processes by integrating real-time data sy
 - Turso (libSQL) — cloud SQLite database
 - Local SQLite fallback (`local.db`) for development
 
-### Authentication & Cloud
-
-- Firebase Authentication
-- Firebase Firestore
-- Firebase Security Rules
-
 ### AI Integration
 
 - Google Gemini API (`@google/genai`)
@@ -135,15 +129,6 @@ GEMINI_API_KEY=your_gemini_api_key
 # Optional: Turso cloud database (falls back to local SQLite if omitted)
 TURSO_DATABASE_URL=libsql://your-database.turso.io
 TURSO_AUTH_TOKEN=your_turso_auth_token
-
-# Firebase (for Vercel/production deployments)
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_APP_ID=
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_DATABASE_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
 ```
 
 ### Run the Application
