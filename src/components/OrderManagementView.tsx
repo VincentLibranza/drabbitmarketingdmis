@@ -335,6 +335,7 @@ export default function OrderManagementView({
     doc.text(`P${vatVal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 95, summaryY + 33, { align: "right" });
 
     // Left Box 2: Remarks
+    doc.setFillColor(boxInnerBg[0], boxInnerBg[1], boxInnerBg[2]);
     doc.rect(18, summaryY + 41, 82, 33, "FD");
     doc.setFont("Helvetica", "bold");
     doc.setFontSize(8);
