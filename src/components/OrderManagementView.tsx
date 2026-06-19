@@ -27,6 +27,8 @@ import {
 import { Order, OrderStatus, PaymentStatus, Product, Customer, OrderItem, Invoice } from "../types";
 import { LocalDB } from "../services/db";
 import { jsPDF } from "jspdf";
+// @ts-ignore
+import drabbitLogo from "../assets/images/drabbit_logo_1781809598838.jpg";
 
 interface OrderManagementViewProps {
   orders: Order[];
@@ -917,104 +919,240 @@ export default function OrderManagementView({
               </div>
 
               {/* Invoice Printable Body */}
-              <div className="p-8 overflow-y-auto space-y-6 text-slate-700 print:text-black">
+              <div className="p-6 overflow-y-auto bg-[#f9a4a4] text-slate-900 border-t border-b border-rose-300 print:bg-white print:text-black">
                 
-                {/* Header coordinates */}
-                <div className="flex justify-between items-start pb-6 border-b border-slate-200">
-                  <div>
-                    <h1 className="text-xl font-bold tracking-tight text-slate-950 font-sans">DRABBIT MARKETING</h1>
-                    <p className="text-xs text-indigo-600 font-semibold uppercase tracking-wider font-mono">SUPPLY & DISTRIBUTION CENTER</p>
-                    <p className="text-xs text-slate-400 mt-1.5">Plainview Village KM.10 Sasa, Davao City</p>
-                    <p className="text-xs text-slate-405">Proprietor: Rufino N. Libranza Jr.</p>
+                {/* Physical receipt book look with pink color and black typewriter-style borders */}
+                <div className="relative font-serif max-w-2xl mx-auto p-4 md:p-6 bg-[#fca3a3] border-4 border-double border-[#8b3535] rounded-xl shadow-inner space-y-4 print:border-none print:shadow-none print:bg-white">
+                  
+                  {/* Subtle cartoon watermarked logo inside sheet */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.06] pointer-events-none select-none">
+                    <img src={drabbitLogo} alt="Watermark Rabbit" className="w-80 h-80 object-contain mix-blend-multiply" />
                   </div>
-                  <div className="text-right">
-                    <h2 className="text-lg font-bold text-slate-900">INVOICE</h2>
-                    <p className="text-xs font-mono font-medium text-slate-500 mt-1">Ref: {selectedInvoiceOrder.orderRefNo}</p>
-                    <div className="mt-3 inline-block px-2.5 py-1 text-xs font-bold rounded-lg bg-indigo-50 text-indigo-700">
-                      Payment Status: {selectedInvoiceOrder.paymentStatus}
-                    </div>
-                  </div>
-                </div>
 
-                {/* Bill To & Bill details info panel */}
-                <div className="grid grid-cols-2 gap-6 text-xs">
-                  <div>
-                    <p className="text-slate-400 uppercase tracking-wider font-semibold text-[10px]">BILLED CLIENT</p>
-                    <div className="mt-2 text-slate-900 font-bold text-sm">
-                      {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.customerName || "Walk-In buyer"}
+                  {/* Header containing rabbit logo, name and official title */}
+                  <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-3 border-b-2 border-dashed border-[#8b3535] relative">
+                    <div className="flex items-center gap-3">
+                      <div className="h-16 w-16 bg-white rounded-xl flex items-center justify-center border border-rose-300 overflow-hidden shrink-0 shadow-sm">
+                        <img 
+                          src={drabbitLogo} 
+                          alt="Drabbit Logo" 
+                          className="h-full w-full object-contain mix-blend-multiply"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div>
+                        <h1 className="text-xl font-extrabold tracking-tight text-slate-950 font-sans leading-none">DRABBIT MARKETING</h1>
+                        <p className="text-[10px] font-mono font-bold text-slate-800 uppercase tracking-widest mt-1">Supply & Distribution Center</p>
+                        <p className="text-[9px] text-slate-800 tracking-tight">KM. 10 Sasa, Davao City, Philippines</p>
+                        <p className="text-[9px] text-slate-800 tracking-tight font-mono">VAT Reg. TIN: 168-925-306-00000</p>
+                      </div>
                     </div>
-                    <p className="mt-1 text-slate-500">
-                      Address: {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.address || "Davao City Local Customer"}
-                    </p>
-                    <p className="mt-0.5 text-slate-400">
-                      Phone: {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.contact || "N/A"}
-                    </p>
-                    {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.tin && (
-                      <p className="mt-1 text-emerald-800 font-mono text-[10px] bg-emerald-50/50 border border-emerald-100/50 rounded px-1.5 py-0.5 inline-block">
-                        TIN: <strong className="font-bold text-slate-900">{customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.tin}</strong>
+                    <div className="text-right mt-3 md:mt-0 md:self-end">
+                      <h2 className="text-xl font-black text-[#a61c1c] tracking-widest font-sans underline decoration-double">CHARGE INVOICE</h2>
+                      <p className="text-sm font-mono font-black text-[#dc2626] mt-1 bg-white/60 px-2 py-0.5 rounded border border-[#8b3535]/30 inline-block">
+                        No. {selectedInvoiceOrder.orderRefNo.replace(/\D/g, "") ? selectedInvoiceOrder.orderRefNo.replace(/\D/g, "") : "4574"}
                       </p>
-                    )}
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-slate-400 uppercase tracking-wider font-semibold text-[10px]">TRANSACTION DETAILS</p>
-                    <p className="mt-2 text-slate-900">
-                      Date Issued: <strong className="font-semibold font-mono">{new Date(selectedInvoiceOrder.orderDate).toLocaleDateString()}</strong>
-                    </p>
-                    <p className="mt-1 text-slate-900">
-                      Due Date: <strong className="font-semibold font-mono text-rose-500">{selectedInvoiceOrder.dueDate}</strong>
-                    </p>
-                    <p className="mt-1 text-slate-900">
-                      Logistics Mode: <strong className="font-semibold">{selectedInvoiceOrder.status}</strong>
-                    </p>
-                  </div>
-                </div>
 
-                {/* Line Items bill table */}
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 font-bold border-b border-slate-200 text-slate-500 uppercase tracking-wider">
-                      <th className="py-2.5 px-3">Product Description</th>
-                      <th className="py-2.5 px-3 text-center">Qty Purchased</th>
-                      <th className="py-2.5 px-3 text-right">Unit Price</th>
-                      <th className="py-2.5 px-3 text-right">Line Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {selectedInvoiceOrder.items.map((item, idx) => {
-                      const prod = products.find(p => p.productId === item.productId);
-                      return (
-                        <tr key={idx}>
-                          <td className="py-3 px-3 font-medium text-slate-900">{prod?.productName || "Packaging Item"}</td>
-                          <td className="py-3 px-3 text-center font-mono">{item.quantity} units</td>
-                          <td className="py-3 px-3 text-right font-mono">₱{item.unitPrice.toFixed(2)}</td>
-                          <td className="py-3 px-3 text-right font-bold font-mono text-slate-950">₱{(item.quantity * item.unitPrice).toFixed(2)}</td>
+                  {/* Customer Information Sheet details shaped like physical lined blanks */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-y-2 gap-x-4 text-xs font-serif text-slate-900 border-b border-[#8b3535] pb-3">
+                    
+                    <div className="md:col-span-8 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">CHARGED to:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2 font-bold text-slate-950 font-sans">
+                        {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.customerName || "Walk-In buyer"}
+                      </span>
+                    </div>
+                    
+                    <div className="md:col-span-4 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">Date:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2 font-mono font-semibold">
+                        {new Date(selectedInvoiceOrder.orderDate).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }).toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="md:col-span-8 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">Address:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2 font-sans overflow-hidden text-ellipsis whitespace-nowrap">
+                        {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.address || "Davao City Local Customer"}
+                      </span>
+                    </div>
+
+                    <div className="md:col-span-4 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">Terms:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2 font-mono font-bold">
+                        30 DAYS
+                      </span>
+                    </div>
+
+                    <div className="md:col-span-4 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">TIN:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2 font-mono">
+                        {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.tin || "000-000-000-000"}
+                      </span>
+                    </div>
+
+                    <div className="md:col-span-5 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">Business Style:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2">
+                        {customers.find(c => c.customerId === selectedInvoiceOrder.customerId)?.customerName?.toUpperCase().includes("HOTEL") ? "HOTEL" : "RETAILER"}
+                      </span>
+                    </div>
+
+                    <div className="md:col-span-3 flex items-baseline">
+                      <span className="font-bold text-slate-950 uppercase text-[10px] shrink-0 mr-1.5 font-mono">P.O. No.:</span>
+                      <span className="border-b border-[#8b3535] border-dotted flex-1 px-2 font-mono">
+                        N/A
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Main physical grid bill table */}
+                  <div className="border border-slate-950 overflow-hidden bg-rose-50/50">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-[#e28a8a] text-slate-950 font-bold border-b border-slate-950 font-mono text-[9px] uppercase tracking-wider">
+                          <th className="py-1.5 px-2 border-r border-slate-950 text-center w-14">Quantity</th>
+                          <th className="py-1.5 px-2 border-r border-slate-950 text-center w-14">Unit</th>
+                          <th className="py-1.5 px-3 border-r border-slate-950">Description</th>
+                          <th className="py-1.5 px-3 border-r border-slate-950 text-right w-24">Unit Price</th>
+                          <th className="py-1.5 px-3 text-right w-28">Amount</th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      </thead>
+                      <tbody>
+                        {/* Render active items */}
+                        {selectedInvoiceOrder.items.map((item, idx) => {
+                          const prod = products.find(p => p.productId === item.productId);
+                          const isClingWrap = prod?.productName?.toLowerCase().includes("cling") || prod?.productName?.toLowerCase().includes("wrap");
+                          const unitStr = isClingWrap ? "ROLL" : "PCS";
+                          return (
+                            <tr key={idx} className="border-b border-slate-950 font-sans text-[11px] text-slate-950">
+                              <td className="py-2.5 px-2 border-r border-slate-950 text-center font-mono font-bold">{item.quantity}</td>
+                              <td className="py-2.5 px-2 border-r border-slate-950 text-center font-mono">{unitStr}</td>
+                              <td className="py-2.5 px-3 border-r border-slate-950 font-semibold">{prod?.productName || "Packaging Item"}</td>
+                              <td className="py-2.5 px-3 border-r border-slate-950 text-right font-mono">₱{item.unitPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td className="py-2.5 px-3 text-right font-mono font-bold">₱{(item.quantity * item.unitPrice).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                          );
+                        })}
+                        {/* Pad with empty table rows to fill typical receipt paper height (Total: 8 rows) */}
+                        {Array.from({ length: Math.max(0, 8 - selectedInvoiceOrder.items.length) }).map((_, idx) => (
+                          <tr key={`empty-${idx}`} className="border-b border-slate-950 h-7">
+                            <td className="border-r border-slate-950"></td>
+                            <td className="border-r border-slate-950"></td>
+                            <td className="border-r border-slate-950"></td>
+                            <td className="border-r border-slate-950"></td>
+                            <td></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
-                {/* Total box block */}
-                <div className="pt-4 border-t border-slate-250 flex flex-col items-end spacing-y-1.5 text-xs">
-                  <div className="flex justify-between w-64 text-slate-500">
-                    <span>Vatable Sales</span>
-                    <span className="font-mono">₱{(selectedInvoiceOrder.totalAmount / 1.12).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between w-64 text-slate-500 mt-1">
-                    <span>Value Added Tax (12% VAT)</span>
-                    <span className="font-mono">₱{((selectedInvoiceOrder.totalAmount / 1.12) * 0.12).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between w-64 text-slate-900 font-bold text-base border-t border-slate-200 mt-2 pt-2">
-                    <span>TOTAL PAYABLE</span>
-                    <span className="font-mono text-indigo-600">₱{selectedInvoiceOrder.totalAmount.toFixed(2)}</span>
-                  </div>
-                </div>
+                  {/* Summary & Tax break-ups block */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                    
+                    {/* Left Hand Grid: VAT summary box & Remarks */}
+                    <div className="space-y-4">
+                      <div className="border border-slate-950 rounded bg-rose-50/50 text-xs p-3 md:p-4 leading-relaxed">
+                        <table className="w-full font-mono">
+                          <thead>
+                            <tr className="border-b border-slate-950 text-[10px] md:text-xs uppercase">
+                              <th className="pb-1.5 text-left font-black">Tax Details</th>
+                              <th className="pb-1.5 text-right font-black">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="py-1">Vatable Sales</td>
+                              <td className="text-right font-bold">₱{(selectedInvoiceOrder.totalAmount / 1.12).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                            <tr>
+                              <td className="py-1">VAT-Exempt Sales</td>
+                              <td className="text-right font-bold">—</td>
+                            </tr>
+                            <tr>
+                              <td className="py-1">Zero Rated Sales</td>
+                              <td className="text-right font-bold">—</td>
+                            </tr>
+                            <tr className="border-t border-slate-950/40">
+                              <td className="pt-2 font-bold">VAT Amount</td>
+                              <td className="pt-2 text-right font-black">₱{((selectedInvoiceOrder.totalAmount / 1.12) * 0.12).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      <div className="border border-slate-950 p-3 md:p-4 font-mono min-h-[110px] relative bg-rose-50/50 text-xs">
+                        <span className="font-bold underline text-[10px] tracking-wide block uppercase text-slate-800">REMARKS:</span>
+                        <div className="mt-1.5 text-xs select-none italic text-slate-800 leading-normal">
+                          {selectedInvoiceOrder.paymentStatus === PaymentStatus.Paid ? "PAYMENT SECURED IN FULL — THANK YOU FOR YOUR BUSINESS." : "TERMS: 30 DAYS DISPATCHED LOGISTICS CARRIER CORRESPONDENCE."}
+                        </div>
+                        <div className="absolute bottom-1 right-2 text-[9px] text-slate-800">
+                          Sr. Citizen TIN / PWD ID: ______________
+                        </div>
+                      </div>
+                    </div>
 
-                {/* Footer notes */}
-                <div className="pt-8 border-t border-slate-100 text-center text-[10px] text-slate-400 space-y-1 mt-6">
-                  <p>Thank you for buying packaging supplies from Drabbit Marketing!</p>
-                  <p>Invoices are automatically generated by the Drabbit DMIS server.</p>
-                  <p className="font-mono">Plainview Village KM.10 Sasa, Davao City, Philippines</p>
+                    {/* Right Hand Grid: Total summary list & Authorized signature banner */}
+                    <div className="space-y-4">
+                      <div className="border border-slate-950 bg-rose-50/50 p-3.5 md:p-4.5 leading-relaxed text-xs md:text-sm font-mono text-slate-900">
+                        <div className="flex justify-between font-mono py-0.5">
+                          <span>Total Sales (VAT Inc.)</span>
+                          <span className="font-bold">₱{selectedInvoiceOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10px] md:text-xs text-slate-700 py-0.5">
+                          <span>Less: VAT (12%)</span>
+                          <span>-₱{((selectedInvoiceOrder.totalAmount / 1.12) * 0.12).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10px] md:text-xs text-slate-700 py-0.5">
+                          <span>Amount Net of VAT</span>
+                          <span>₱{(selectedInvoiceOrder.totalAmount / 1.12).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10px] md:text-xs text-slate-650 py-0.5">
+                          <span>Less: SC/PWD Discount</span>
+                          <span>—</span>
+                        </div>
+                        <div className="flex justify-between font-bold border-t border-dashed border-slate-950/40 my-1 pt-1.5 pb-0.5">
+                          <span>Amount Due</span>
+                          <span>₱{selectedInvoiceOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="flex justify-between border-t-2 border-slate-950 pt-1.5 text-sm md:text-base font-black text-[#a61c1c]">
+                          <span>TOTAL AMOUNT DUE</span>
+                          <span className="underline decoration-double">₱{selectedInvoiceOrder.totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      </div>
+
+                      {/* Official Signature Acceptance Oval Frame */}
+                      <div className="border border-slate-950 p-3 rounded-lg bg-rose-50/50 flex flex-col justify-between items-center text-center min-h-[110px] relative">
+                        <div className="text-[10px] leading-tight font-sans text-slate-900 uppercase">
+                          Received the above mentioned GOODS in good order and condition.
+                        </div>
+                        <div className="w-11/12 border-b border-slate-950 border-solid mt-6 min-h-[1.5rem]">
+                          {/* Blank line for manual customer/receiver signature */}
+                        </div>
+                        <div className="text-[10px] font-bold text-slate-900 mt-1 uppercase">
+                          Authorized Representative
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Footnotes booklet metadata */}
+                  <div className="flex flex-col md:flex-row justify-between pt-3 border-t-2 border-dashed border-[#8b3535] text-[7.5px] text-slate-800 font-mono tracking-tighter leading-tight mt-1">
+                    <div className="space-y-0.5">
+                      <p>50 Bklts (3x) 2701-3200 — BIR Authority to Print No. 132AU20220000008286</p>
+                      <p>Date issued: 10/13/2022 — POJE PRINTING PRESS — Km. 10 Sasa, Davao City</p>
+                      <p>TIN: 168-925-306-00000</p>
+                    </div>
+                    <div className="text-right space-y-0.5 mt-1 md:mt-0">
+                      <p>Printer's Accreditation No.: 132MP20180000000014</p>
+                      <p>Date Issued: 8/1/2018 — Expiry Date: 8/1/2023</p>
+                    </div>
+                  </div>
+
                 </div>
 
               </div>
