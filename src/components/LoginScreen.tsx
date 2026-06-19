@@ -119,12 +119,12 @@ export default function LoginScreen({ onLoginSuccess }: LoginScreenProps) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="flex justify-center mb-4">
-          <div className="h-16 w-16 rounded-2xl bg-white border border-slate-150 flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+        <div className="flex justify-center mb-2">
+          <div className="h-28 w-28 flex items-center justify-center overflow-hidden shrink-0">
             <img 
               src={drabbitLogo} 
               alt="Drabbit Logo" 
-              className="h-full w-full object-cover"
+              className="h-full w-full object-contain mix-blend-multiply"
               referrerPolicy="no-referrer"
             />
           </div>

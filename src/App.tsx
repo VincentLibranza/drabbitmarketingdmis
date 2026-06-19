@@ -371,11 +371,11 @@ export default function App() {
                 {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
 
-              <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center border border-slate-150 shadow-sm overflow-hidden shrink-0">
+              <div className="h-16 w-16 flex items-center justify-center overflow-hidden shrink-0">
                 <img 
                   src={drabbitLogo} 
                   alt="Drabbit Logo" 
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-contain mix-blend-multiply"
                   referrerPolicy="no-referrer"
                 />
               </div>
@@ -474,11 +474,11 @@ export default function App() {
               >
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 bg-white rounded-lg flex items-center justify-center border border-slate-150 overflow-hidden shrink-0">
+                    <div className="h-12 w-12 flex items-center justify-center overflow-hidden shrink-0">
                       <img 
                         src={drabbitLogo} 
                         alt="Drabbit Logo" 
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain mix-blend-multiply"
                         referrerPolicy="no-referrer"
                       />
                     </div>
