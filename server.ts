@@ -197,9 +197,16 @@ async function initDb() {
         invoiceDate TEXT,
         totalAmount REAL,
         paymentStatus TEXT,
-        dueDate TEXT
+        dueDate TEXT,
+        orderSnapshot TEXT
       )
     `);
+
+    try {
+      await db.execute("ALTER TABLE invoices ADD COLUMN orderSnapshot TEXT");
+    } catch (e) {
+      // Ignore if the column already exists
+    }
 
     // Seed Users if empty
     const userCheck = await db.execute("SELECT COUNT(*) as count FROM users");
@@ -547,7 +554,25 @@ app.get(["/api/db/pull", "/db/pull"], async (req, res) => {
     const deliveries = deliveriesRes.rows;
     const complaints = complaintsRes.rows;
     const auditLogs = auditLogsRes.rows;
-    const invoices = invoicesRes.rows;
+    
+    const invoices = invoicesRes.rows.map((row: any) => {
+      let parsedSnapshot = undefined;
+      try {
+        if (row.orderSnapshot) {
+          if (typeof row.orderSnapshot === "string") {
+            parsedSnapshot = JSON.parse(row.orderSnapshot);
+          } else {
+            parsedSnapshot = row.orderSnapshot;
+          }
+        }
+      } catch (e: any) {
+        console.error(`[DB Pull Proxy] Failed parsing orderSnapshot JSON for invoice ${row.invoiceId || "unknown"}:`, e.message || e);
+      }
+      return {
+        ...row,
+        orderSnapshot: parsedSnapshot,
+      };
+    });
 
     console.log(`[DB Pull Proxy] Load successful. Row counts: users=${users.length}, products=${products.length}, customers=${customers.length}, orders=${orders.length}, deliveries=${deliveries.length}, complaints=${complaints.length}, auditLogs=${auditLogs.length}, invoices=${invoices.length}`);
 
@@ -731,14 +756,15 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
       statements.push({ sql: "DELETE FROM invoices", args: [] });
       for (const row of rows) {
         statements.push({
-          sql: "INSERT INTO invoices (invoiceId, orderId, invoiceDate, totalAmount, paymentStatus, dueDate) VALUES (?, ?, ?, ?, ?, ?)",
+          sql: "INSERT INTO invoices (invoiceId, orderId, invoiceDate, totalAmount, paymentStatus, dueDate, orderSnapshot) VALUES (?, ?, ?, ?, ?, ?, ?)",
           args: [
             row.invoiceId,
             row.orderId ?? null,
             row.invoiceDate ?? null,
             row.totalAmount ?? null,
             row.paymentStatus ?? null,
-            row.dueDate ?? null
+            row.dueDate ?? null,
+            row.orderSnapshot ? JSON.stringify(row.orderSnapshot) : null
           ],
         });
       }

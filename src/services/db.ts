@@ -467,7 +467,8 @@ export class LocalDB {
           invoiceDate: o.orderDate.split("T")[0],
           totalAmount: o.totalAmount,
           paymentStatus: o.paymentStatus,
-          dueDate: o.dueDate
+          dueDate: o.dueDate,
+          orderSnapshot: o
         });
         changed = true;
       }
