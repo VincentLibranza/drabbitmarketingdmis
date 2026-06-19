@@ -780,7 +780,11 @@ app.post(["/api/db/push", "/db/push"], async (req, res) => {
         await db.batch(statements, "write");
       } catch (batchErr: any) {
         const errMsg = batchErr.message || String(batchErr);
-        if (table === "invoices" && (errMsg.includes("no such column: orderSnapshot") || errMsg.includes("no such column: ordersnapshot"))) {
+        const lowerMsg = errMsg.toLowerCase();
+        const isColumnError = lowerMsg.includes("column") || lowerMsg.includes("has no") || lowerMsg.includes("no such");
+        const isOrderSnapshot = lowerMsg.includes("ordersnapshot");
+        
+        if (table === "invoices" && isColumnError && isOrderSnapshot) {
           console.warn("[DB Push Proxy] Column orderSnapshot doesn't exist on remote Turso. Initiating live migration...");
           try {
             await db.execute("ALTER TABLE invoices ADD COLUMN orderSnapshot TEXT");
